@@ -1,0 +1,60 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  // ... inne pola użytkownika (np. passwordHash, avatarUrl)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sentMessages     Message[]         @relation("SentMessages")
+  chatParticipants ChatParticipant[] // W jakich czatach użytkownik uczestniczy
+  // ... inne relacje, np. do postów
+}
+
+// Reprezentuje pojedynczą konwersację
+model Chat {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // Aktualizowane przy każdej nowej wiadomości
+
+  messages     Message[]         // Wszystkie wiadomości w tym czacie
+  participants ChatParticipant[] // Wszyscy uczestnicy tego czatu
+}
+
+// Tabela łącząca: który użytkownik jest w którym czacie (relacja wiele-do-wielu)
+model ChatParticipant {
+  id     String @id @default(cuid())
+  userId String
+  chatId String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  // Opcjonalnie: kiedy użytkownik ostatnio widział wiadomości w tym czacie
+  // lastReadAt DateTime?
+
+  @@unique([userId, chatId]) // Użytkownik może być tylko raz w danym czacie
+}
+
+// Reprezentuje pojedynczą wiadomość
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  senderId String // Kto wysłał
+  chatId   String // Do którego czatu należy
+
+  sender User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+}

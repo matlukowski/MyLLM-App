@@ -1,0 +1,18 @@
+# docker-compose.yml
+version: "3.8"
+services:
+  postgres_db:
+    image: postgres:15 # Możesz wybrać wersję
+    container_name: instagram_clone_db
+    restart: always
+    environment:
+      POSTGRES_USER: yourusername # Zmień na swoje
+      POSTGRES_PASSWORD: yourpassword # Zmień na swoje
+      POSTGRES_DB: instagram_clone_dev # Nazwa bazy anych
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

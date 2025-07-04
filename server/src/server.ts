@@ -1,0 +1,373 @@
+import express, { Express, Request, Response } from "express";
+import http from "http";
+import { Server as SocketIOServer } from "socket.io";
+import cors from "cors";
+import { PrismaClient } from "@prisma/client";
+import axios from "axios";
+import { getAICharacter, isValidAICharacterId } from "./config/aiCharacters";
+
+// Inicjalizacje
+const prisma = new PrismaClient();
+const app: Express = express();
+const httpServer = http.createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: ["http://localhost:3000", "http://localhost:5173"],
+    methods: ["GET", "POST"],
+  },
+});
+
+// Konfiguracja serwisu RAG
+const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL || "http://localhost:5000";
+
+// Middlewares
+app.use(
+  cors({
+    origin: ["http://localhost:3000", "http://localhost:5173"],
+  })
+);
+app.use(express.json());
+
+// --- API Endpoints ---
+
+// Endpoint logowania użytkownika
+app.post("/api/users/login", async (req: Request, res: Response) => {
+  const { username, password } = req.body;
+
+  console.log("🔐 Próba logowania:", { username, password });
+
+  if (!username || !password) {
+    console.log("❌ Brak username lub password");
+    return res
+      .status(400)
+      .json({ error: "Username and password are required" });
+  }
+
+  try {
+    // Sprawdź wszystkich użytkowników w bazie
+    const allUsers = await prisma.user.findMany({
+      select: { id: true, username: true },
+    });
+    console.log("👥 Wszyscy użytkownicy w bazie:", allUsers);
+
+    // Znajdź użytkownika po nazwie użytkownika
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true, username: true },
+    });
+
+    console.log("🔍 Znaleziony użytkownik:", user);
+
+    if (!user) {
+      console.log("❌ Użytkownik nie znaleziony");
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    // W prawdziwej aplikacji tutaj byłaby weryfikacja hasła
+    // Na razie akceptujemy dowolne hasło dla istniejących użytkowników
+    console.log("✅ Logowanie udane");
+    res.json(user);
+  } catch (error) {
+    console.error("💥 Error during login:", error);
+    res.status(500).json({ error: "Could not process login" });
+  }
+});
+
+// Pobierz listę czatów dla zalogowanego użytkownika
+app.get("/api/chats", async (req: Request, res: Response) => {
+  // Pobierz ID użytkownika z query parametru lub headera
+  const loggedInUserId =
+    (req.query.userId as string) || (req.headers["user-id"] as string);
+
+  if (!loggedInUserId) {
+    return res.status(401).json({ error: "User ID is required" });
+  }
+
+  try {
+    const userChatParticipants = await prisma.chatParticipant.findMany({
+      where: { userId: loggedInUserId },
+      orderBy: { chat: { updatedAt: "desc" } },
+      include: {
+        chat: {
+          include: {
+            participants: {
+              include: {
+                user: { select: { id: true, username: true } },
+              },
+            },
+            messages: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    const chats = userChatParticipants.map((p) => p.chat);
+    res.json(chats);
+  } catch (error) {
+    console.error("Error fetching chats:", error);
+    res.status(500).json({ error: "Could not fetch chats" });
+  }
+});
+
+// Pobierz wiadomości dla konkretnego czatu (z paginacją)
+app.get("/api/chats/:chatId/messages", async (req: Request, res: Response) => {
+  const { chatId } = req.params;
+  const { cursor } = req.query; // Dla paginacji (ID ostatniej wiadomości)
+
+  try {
+    // TODO: W prawdziwej aplikacji sprawdź, czy użytkownik ma dostęp do tego czatu
+    const messages = await prisma.message.findMany({
+      where: { chatId },
+      take: 30,
+      ...(cursor && { skip: 1, cursor: { id: String(cursor) } }),
+      orderBy: { createdAt: "desc" },
+      include: { sender: { select: { id: true, username: true } } },
+    });
+    res.json(messages.reverse());
+  } catch (error) {
+    console.error("Error fetching messages:", error);
+    res.status(500).json({ error: "Could not fetch messages" });
+  }
+});
+
+// Wyślij nową wiadomość do czatu
+app.post("/api/chats/:chatId/messages", async (req: Request, res: Response) => {
+  const { chatId } = req.params;
+  const { content, senderId } = req.body;
+
+  if (!content?.trim() || !senderId) {
+    return res.status(400).json({ error: "Content and senderId are required" });
+  }
+
+  try {
+    // Sprawdź czy czat istnieje i czy użytkownik ma do niego dostęp
+    const chat = await prisma.chat.findFirst({
+      where: {
+        id: chatId,
+        participants: {
+          some: { userId: senderId },
+        },
+      },
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: "Chat not found or access denied" });
+    }
+
+    // Utwórz nową wiadomość
+    const message = await prisma.message.create({
+      data: {
+        content: content.trim(),
+        senderId,
+        chatId,
+      },
+      include: {
+        sender: { select: { id: true, username: true } },
+      },
+    });
+
+    // Zaktualizuj czas ostatniej modyfikacji czatu
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: { updatedAt: new Date() },
+    });
+
+    res.status(201).json(message);
+  } catch (error) {
+    console.error("Error sending message:", error);
+    res.status(500).json({ error: "Could not send message" });
+  }
+});
+
+// Utwórz nowy czat (lub znajdź istniejący) z innym użytkownikiem
+app.post("/api/chats", async (req: Request, res: Response) => {
+  const { recipientId } = req.body;
+  const currentUserId = "1"; // Jan Kowalski - główny użytkownik
+
+  if (!recipientId || currentUserId === recipientId) {
+    return res.status(400).json({ error: "Invalid recipient ID" });
+  }
+
+  try {
+    const existingChat = await prisma.chat.findFirst({
+      where: {
+        AND: [
+          { participants: { some: { userId: currentUserId } } },
+          { participants: { some: { userId: recipientId } } },
+        ],
+        participants: {
+          every: {
+            userId: {
+              in: [currentUserId, recipientId],
+            },
+          },
+        },
+      },
+    });
+
+    if (existingChat) {
+      return res.json(existingChat);
+    }
+
+    const newChat = await prisma.chat.create({
+      data: {
+        participants: {
+          create: [{ userId: currentUserId }, { userId: recipientId }],
+        },
+      },
+    });
+    res.status(201).json(newChat);
+  } catch (error) {
+    console.error("Error creating or finding chat:", error);
+    res.status(500).json({ error: "Could not process chat creation" });
+  }
+});
+
+// Endpoint do czatu z AI (z pamięcią długoterminową RAG)
+app.post("/api/ai/chat", async (req: Request, res: Response) => {
+  const { userId, aiCharId, userMessage, chatHistory } = req.body;
+
+  if (!userId || !aiCharId || !userMessage) {
+    return res.status(400).json({
+      error: "userId, aiCharId i userMessage są wymagane",
+    });
+  }
+
+  // Sprawdź czy postać AI istnieje
+  if (!isValidAICharacterId(aiCharId)) {
+    return res.status(404).json({
+      error: "Nieznana postać AI",
+    });
+  }
+
+  const aiCharacter = getAICharacter(aiCharId);
+  if (!aiCharacter) {
+    return res.status(404).json({
+      error: "Błąd konfiguracji postaci AI",
+    });
+  }
+
+  try {
+    // Przygotuj dane dla serwisu RAG
+    const ragRequest = {
+      userId,
+      aiCharId,
+      userMessage,
+      chatHistory: chatHistory || [],
+      characterPrompt: aiCharacter.prompt,
+    };
+
+    console.log("🤖 Wysyłanie żądania do serwisu RAG:", {
+      userId,
+      aiCharId,
+      userMessage: userMessage.substring(0, 50) + "...",
+      historyLength: chatHistory?.length || 0,
+    });
+
+    // Wyślij żądanie do serwisu RAG
+    const ragResponse = await axios.post(
+      `${RAG_SERVICE_URL}/chat`,
+      ragRequest,
+      {
+        timeout: 30000, // 30 sekund timeout
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const aiResponse = ragResponse.data.response;
+    const memoriesUsed = ragResponse.data.memories_used || 0;
+
+    console.log("✅ Otrzymano odpowiedź z serwisu RAG:", {
+      responseLength: aiResponse.length,
+      memoriesUsed,
+    });
+
+    res.json({
+      response: typeof aiResponse === "string" ? aiResponse : JSON.stringify(aiResponse),
+      aiCharacter: aiCharacter.name,
+      memoriesUsed,
+    });
+  } catch (error: any) {
+    console.error("❌ Błąd komunikacji z serwisem RAG:", error.message);
+
+    if (error.code === "ECONNREFUSED") {
+      return res.status(503).json({
+        error: "Serwis AI jest obecnie niedostępny. Spróbuj ponownie później.",
+      });
+    }
+
+    if (error.response?.data?.error) {
+      return res.status(500).json({
+        error: `Błąd serwisu AI: ${error.response.data.error}`,
+      });
+    }
+
+    res.status(500).json({
+      error: "Wystąpił błąd podczas przetwarzania żądania AI",
+    });
+  }
+});
+
+// --- Logika Socket.IO ---
+
+io.on("connection", (socket) => {
+  console.log(`User connected: ${socket.id}`);
+
+  socket.on("joinChat", (chatId) => {
+    socket.join(chatId);
+    console.log(`User ${socket.id} joined chat room: ${chatId}`);
+  });
+
+  socket.on("leaveChat", (chatId) => {
+    socket.leave(chatId);
+    console.log(`User ${socket.id} left chat room: ${chatId}`);
+  });
+
+  socket.on("sendMessage", async (data) => {
+    const { chatId, content, senderId } = data;
+    if (!content?.trim() || !chatId || !senderId) return;
+
+    try {
+      const message = await prisma.message.create({
+        data: { content, chatId, senderId },
+        include: { sender: { select: { id: true, username: true } } },
+      });
+
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: { updatedAt: new Date() },
+      });
+
+      io.to(chatId).emit("receiveMessage", message);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      socket.emit("messageError", { error: "Could not send message" });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`User disconnected: ${socket.id}`);
+  });
+});
+
+// --- Uruchomienie serwera i obsługa zamykania ---
+
+const PORT = process.env.PORT || 3001;
+httpServer.listen(PORT, () => {
+  console.log(`🚀 Server is running at http://localhost:${PORT}`);
+});
+
+const gracefulShutdown = async (signal: string) => {
+  console.log(`Received ${signal}. Shutting down gracefully...`);
+  await prisma.$disconnect();
+  console.log("Prisma Client disconnected.");
+  process.exit(0);
+};
+
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));

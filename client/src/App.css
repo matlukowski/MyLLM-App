@@ -1,0 +1,7 @@
+/* Styl dla tła wiadomości AI niezależnie od zaznaczenia/focusu */
+.ai-message-content,
+.ai-message-content:focus,
+.ai-message-content:active {
+  background: #363636 !important;
+  background-color: #363636 !important;
+}

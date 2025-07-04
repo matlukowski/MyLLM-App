@@ -1,0 +1,59 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+server
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# AI RAG Service
+/ai-rag-service/
+# Python virtual environment
+/ai-rag-service/venv/
+# PyInstaller generated files (if you ever build an executable)
+/ai-rag-service/build/
+/ai-rag-service/dist/
+# Python bytecode
+/ai-rag-service/__pycache__/
+# Environment variables file
+/ai-rag-service/.env
+# ChromaDB local data directory
+/ai-rag-service/chroma_db/
+
+# --- Standardowe ignorowane pliki dla projektów Node.js/React (jeśli ich jeszcze nie masz) ---
+# node_modules
+/node_modules/
+/server/node_modules/
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# build results
+/dist/
+/build/
+
+# IDE files
+.vscode/
+.idea/
+.DS_Store
