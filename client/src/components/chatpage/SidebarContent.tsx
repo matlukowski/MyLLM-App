@@ -14,39 +14,112 @@ import {
   HiArrowRightOnRectangle,
   HiOutlineSparkles,
   HiOutlinePlus,
+  HiOutlineChatBubbleLeftRight,
+  HiOutlineEllipsisVertical,
 } from "react-icons/hi2";
 import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { AI_CHARACTERS_FRONTEND } from "../../config/aiCharacters";
+import { Chat, getLLMModel } from "../../types/types";
+
+// Dummy data dla przykładowych czatów
+const DUMMY_CHATS: Chat[] = [
+  {
+    id: "chat-1",
+    title: "Pomoc z kodem React",
+    lastMessage: "Dziękuję za pomoc z komponentami!",
+    lastMessageTime: new Date(Date.now() - 1000 * 60 * 30), // 30 minut temu
+    messageCount: 12,
+    modelId: "gpt-4-turbo",
+    userId: "user-1",
+  },
+  {
+    id: "chat-2",
+    title: "Planowanie podróży",
+    lastMessage: "Jakie są najlepsze miejsca w Krakowie?",
+    lastMessageTime: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 godziny temu
+    messageCount: 8,
+    modelId: "claude-3-5-sonnet",
+    userId: "user-1",
+  },
+  {
+    id: "chat-3",
+    title: "Uczenie się TypeScript",
+    lastMessage: "Jak działają generics w TypeScript?",
+    lastMessageTime: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 dzień temu
+    messageCount: 25,
+    modelId: "gpt-4",
+    userId: "user-1",
+  },
+  {
+    id: "chat-4",
+    title: "Przepisy kulinarne",
+    lastMessage: "Przepis na carbonarę wygląda świetnie!",
+    lastMessageTime: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 dni temu
+    messageCount: 6,
+    modelId: "claude-3-opus",
+    userId: "user-1",
+  },
+  {
+    id: "chat-5",
+    title: "Analiza danych Python",
+    lastMessage: "Pandas vs NumPy - różnice",
+    lastMessageTime: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 dni temu
+    messageCount: 15,
+    modelId: "gpt-4-turbo",
+    userId: "user-1",
+  },
+];
 
 interface SidebarContentProps {
-  activeAIChar: string | null;
-  setActiveAIChar: (charId: string | null) => void;
-  onAICharSelect?: () => void; // Callback wywoływany po wyborze asystenta (dla mobile drawer)
+  activeChatId: string | null;
+  setActiveChatId: (chatId: string | null) => void;
+  onChatSelect?: () => void; // Callback wywoływany po wyborze czatu (dla mobile drawer)
+  onNewChat?: () => void; // Callback wywoływany po kliknięciu "Nowa rozmowa"
 }
 
 const SidebarContent: React.FC<SidebarContentProps> = ({
-  activeAIChar,
-  setActiveAIChar,
-  onAICharSelect,
+  activeChatId,
+  setActiveChatId,
+  onChatSelect,
+  onNewChat,
 }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const aiCharacters = AI_CHARACTERS_FRONTEND;
 
   const handleLogout = () => {
     logout();
     navigate("/auth");
   };
 
-  const handleCharacterSelect = (charId: string) => {
-    setActiveAIChar(charId);
-    onAICharSelect?.(); // Wywołaj callback (zamknij drawer na mobile)
+  const handleChatSelect = (chatId: string) => {
+    setActiveChatId(chatId);
+    onChatSelect?.(); // Wywołaj callback (zamknij drawer na mobile)
   };
 
   const handleNewChat = () => {
-    setActiveAIChar(null);
-    onAICharSelect?.();
+    setActiveChatId(null);
+    onNewChat?.(); // Wywołaj callback
+    onChatSelect?.(); // Zamknij drawer na mobile
+  };
+
+  // Funkcja do formatowania czasu
+  const formatTime = (date: Date): string => {
+    const now = new Date();
+    const diffInHours = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+    );
+
+    if (diffInHours < 1) {
+      const diffInMinutes = Math.floor(
+        (now.getTime() - date.getTime()) / (1000 * 60)
+      );
+      return `${diffInMinutes} min temu`;
+    } else if (diffInHours < 24) {
+      return `${diffInHours} godz. temu`;
+    } else {
+      const diffInDays = Math.floor(diffInHours / 24);
+      return `${diffInDays} dni temu`;
+    }
   };
 
   return (
@@ -86,7 +159,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
         </Button>
       </Box>
 
-      {/* Lista asystentów */}
+      {/* Lista czatów */}
       <VStack align="stretch" flex="1" overflowY="auto" px={2} gap={1}>
         <Text
           fontSize="xs"
@@ -97,83 +170,136 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
           px={3}
           py={2}
         >
-          Asystenci
+          Ostatnie rozmowy
         </Text>
 
-        {aiCharacters.map((char) => (
-          <Button
-            key={char.id}
-            onClick={() => handleCharacterSelect(char.id)}
-            w="full"
-            h="auto"
-            p={3}
-            bg={char.id === activeAIChar ? "gray.800" : "transparent"}
-            color="white"
-            border="none"
-            borderRadius="8px"
-            justifyContent="flex-start"
-            _hover={{
-              bg: char.id === activeAIChar ? "gray.800" : "gray.800",
-            }}
-            _active={{
-              transform: "scale(0.98)",
-            }}
-            transition="all 0.2s ease"
-            fontWeight="normal"
-            textAlign="left"
-          >
-            <HStack gap={3} w="full">
-              <Flex
-                align="center"
-                justify="center"
-                w={8}
-                h={8}
-                bg={char.color.replace(".500", ".600")}
-                borderRadius="6px"
-                fontSize="sm"
-                flexShrink={0}
-              >
-                {char.avatar}
-              </Flex>
+        {DUMMY_CHATS.map((chat) => {
+          const model = getLLMModel(chat.modelId);
+          const isActive = chat.id === activeChatId;
 
-              <VStack align="start" gap={0} flex={1} minW={0}>
-                <HStack w="full" justify="space-between">
+          return (
+            <Button
+              key={chat.id}
+              onClick={() => handleChatSelect(chat.id)}
+              w="full"
+              h="auto"
+              p={3}
+              bg={isActive ? "gray.800" : "transparent"}
+              color="white"
+              border="none"
+              borderRadius="8px"
+              justifyContent="flex-start"
+              _hover={{
+                bg: isActive ? "gray.800" : "gray.800",
+              }}
+              _active={{
+                transform: "scale(0.98)",
+              }}
+              transition="all 0.2s ease"
+              fontWeight="normal"
+              textAlign="left"
+              position="relative"
+              role="group"
+            >
+              <HStack gap={3} w="full">
+                <Flex
+                  align="center"
+                  justify="center"
+                  w={8}
+                  h={8}
+                  bg="gray.700"
+                  borderRadius="6px"
+                  fontSize="sm"
+                  flexShrink={0}
+                >
+                  <Icon
+                    as={HiOutlineChatBubbleLeftRight}
+                    boxSize={4}
+                    color="gray.300"
+                  />
+                </Flex>
+
+                <VStack align="start" gap={1} flex={1} minW={0}>
+                  <HStack w="full" justify="space-between">
+                    <Text
+                      fontWeight="500"
+                      color="white"
+                      fontSize="sm"
+                      overflow="hidden"
+                      textOverflow="ellipsis"
+                      whiteSpace="nowrap"
+                      flex={1}
+                    >
+                      {chat.title}
+                    </Text>
+                    {isActive && (
+                      <Box
+                        w={2}
+                        h={2}
+                        bg="green.400"
+                        borderRadius="full"
+                        flexShrink={0}
+                      />
+                    )}
+                  </HStack>
+
                   <Text
-                    fontWeight="500"
-                    color="white"
-                    fontSize="sm"
+                    fontSize="xs"
+                    color="gray.400"
                     overflow="hidden"
                     textOverflow="ellipsis"
                     whiteSpace="nowrap"
-                    flex={1}
+                    w="full"
                   >
-                    {char.name}
+                    {chat.lastMessage}
                   </Text>
-                  {char.id === activeAIChar && (
-                    <Box
-                      w={2}
-                      h={2}
-                      bg="green.400"
-                      borderRadius="full"
-                      flexShrink={0}
-                    />
-                  )}
-                </HStack>
 
-                <Text
-                  fontSize="xs"
-                  color="gray.400"
-                  overflow="hidden"
-                  textOverflow="ellipsis"
-                  whiteSpace="nowrap"
-                  w="full"
-                >
-                  {char.description}
-                </Text>
-              </VStack>
-            </HStack>
-          </Button>
-        ))}
+                  <HStack justify="space-between" w="full">
+                    <Badge
+                      size="xs"
+                      colorScheme="blue"
+                      variant="subtle"
+                      fontSize="10px"
+                      px={2}
+                      py={0.5}
+                    >
+                      {model?.name || "Nieznany"}
+                    </Badge>
+                    <Text fontSize="10px" color="gray.500">
+                      {formatTime(chat.lastMessageTime)}
+                    </Text>
+                  </HStack>
+                </VStack>
+              </HStack>
+
+              {/* Menu opcji (widoczne po hover) */}
+              <Button
+                position="absolute"
+                top={2}
+                right={2}
+                size="xs"
+                variant="ghost"
+                color="gray.400"
+                minW="auto"
+                h="auto"
+                p={1}
+                opacity={0}
+                _groupHover={{ opacity: 1 }}
+                _hover={{
+                  color: "gray.200",
+                  bg: "gray.700",
+                }}
+                transition="opacity 0.2s"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // TODO: Implementacja menu opcji (usuń, zmień nazwę, etc.)
+                }}
+              >
+                <Icon as={HiOutlineEllipsisVertical} boxSize={3} />
+              </Button>
+            </Button>
+          );
+        })}
       </VStack>
 
       {/* Footer z informacjami o użytkowniku */}

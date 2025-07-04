@@ -12,6 +12,7 @@ import {
   HStack,
   Spinner,
   Icon,
+  Badge,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
 import { useAuth } from "../../contexts/AuthContext";
@@ -20,8 +21,14 @@ import {
   HiOutlineUser,
   HiOutlineClipboardDocument,
   HiOutlineCheck,
+  HiOutlineCog6Tooth,
 } from "react-icons/hi2";
-import { getAICharacterFrontend } from "../../config/aiCharacters";
+import {
+  AVAILABLE_LLM_MODELS,
+  getLLMModel,
+  getPopularLLMModels,
+  type LLMModel,
+} from "../../types/types";
 
 // Animacja migającego kursora
 const blinkAnimation = keyframes`
@@ -90,38 +97,41 @@ const TypewriterText: React.FC<TypewriterTextProps> = ({
   );
 };
 
-interface AIMessage {
+interface ChatMessage {
   id: string;
   content: string;
   timestamp: Date;
-  role: "user" | "ai";
-  memoriesUsed?: number;
+  role: "user" | "assistant";
+  modelId: string;
   isTyping?: boolean;
 }
 
 interface AIChatWindowProps {
-  aiCharId: string;
-  aiCharName: string;
+  chatId: string | null;
+  isNewChat: boolean;
+  onChatCreated?: (chatId: string) => void;
 }
 
 const AIChatWindow: React.FC<AIChatWindowProps> = ({
-  aiCharId,
-  aiCharName,
+  chatId,
+  isNewChat,
+  onChatCreated,
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<AIMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [chatId, setChatId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>(
+    getPopularLLMModels()[0]?.id || "gpt-4-turbo"
+  );
+  const [chatTitle, setChatTitle] = useState<string>("");
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Pobierz konfigurację postaci AI
-  const aiCharConfig = getAICharacterFrontend(aiCharId);
-  const aiColor = aiCharConfig?.color || "blue.500";
-  const aiAvatar = aiCharConfig?.avatar || "🤖";
+  // Pobierz konfigurację wybranego modelu
+  const currentModel = getLLMModel(selectedModel);
 
   // Przewiń do najnowszej wiadomości
   const scrollToBottom = () => {
@@ -133,29 +143,51 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     scrollToBottom();
   }, [messages]);
 
-  // Pobierz lub utwórz czat user-AI i pobierz historię wiadomości
+  // Załaduj czat jeśli nie jest nowy
   useEffect(() => {
-    const fetchOrCreateChat = async () => {
-      if (!user?.id || !aiCharId) return;
-      setLoading(true);
-      setError(null);
+    if (isNewChat) {
+      setMessages([]);
+      setChatTitle("");
+      setLoading(false);
+      return;
+    }
 
-      // Dla AI charakterów używamy specjalnego podejścia - generujemy "wirtualny" chatId
-      const virtualChatId = `ai-chat-${user.id}-${aiCharId}`;
-      setChatId(virtualChatId);
-
-      // Dla AI nie pobieramy historii z bazy danych (na razie)
+    if (!chatId) {
       setMessages([]);
       setLoading(false);
-    };
-    fetchOrCreateChat();
-  }, [user?.id, aiCharId]);
+      return;
+    }
 
-  // Wyślij wiadomość do AI z pamięcią długoterminową
+    // TODO: Załaduj historię czatu z backendu
+    // Na razie używamy dummy data
+    setLoading(true);
+    setTimeout(() => {
+      setMessages([
+        {
+          id: "msg-1",
+          content: "Cześć! Jak mogę Ci pomóc?",
+          timestamp: new Date(Date.now() - 1000 * 60 * 5),
+          role: "assistant",
+          modelId: "gpt-4-turbo",
+        },
+        {
+          id: "msg-2",
+          content: "Potrzebuję pomocy z kodem React",
+          timestamp: new Date(Date.now() - 1000 * 60 * 3),
+          role: "user",
+          modelId: "gpt-4-turbo",
+        },
+      ]);
+      setChatTitle("Pomoc z kodem React");
+      setLoading(false);
+    }, 500);
+  }, [chatId, isNewChat]);
+
+  // Wyślij wiadomość do AI
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newMessage.trim() || !user || isSending || !chatId) return;
+    if (!newMessage.trim() || !user || isSending) return;
 
     const userMessageContent = newMessage.trim();
     setNewMessage("");
@@ -164,11 +196,12 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
 
     try {
       // 1. Dodaj wiadomość użytkownika do lokalnego stanu
-      const userMessage: AIMessage = {
+      const userMessage: ChatMessage = {
         id: `user-${Date.now()}`,
         content: userMessageContent,
         timestamp: new Date(),
         role: "user",
+        modelId: selectedModel,
       };
       setMessages((prev) => [...prev, userMessage]);
 
@@ -186,9 +219,10 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         },
         body: JSON.stringify({
           userId: user.id,
-          aiCharId,
+          modelId: selectedModel,
           userMessage: userMessageContent,
           chatHistory,
+          chatId: isNewChat ? null : chatId,
         }),
       });
 
@@ -201,18 +235,29 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
 
       type AIChatResponse = {
         response: string;
-        aiCharacter: string;
-        memoriesUsed: number;
+        modelId: string;
+        chatId?: string;
+        chatTitle?: string;
       };
       const data: AIChatResponse = await response.json();
 
-      // 4. Dodaj odpowiedź AI do lokalnego stanu
-      const aiMessage: AIMessage = {
+      // 4. Jeśli to nowy czat, ustaw chatId
+      if (isNewChat && data.chatId) {
+        onChatCreated?.(data.chatId);
+      }
+
+      // 5. Ustaw tytuł czatu jeśli został zwrócony
+      if (data.chatTitle) {
+        setChatTitle(data.chatTitle);
+      }
+
+      // 6. Dodaj odpowiedź AI do lokalnego stanu
+      const aiMessage: ChatMessage = {
         id: `ai-${Date.now()}`,
         content: data.response,
         timestamp: new Date(),
-        role: "ai",
-        memoriesUsed: data.memoriesUsed,
+        role: "assistant",
+        modelId: selectedModel,
         isTyping: true,
       };
       setMessages((prev) => [...prev, aiMessage]);
@@ -235,6 +280,25 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     });
   };
 
+  // Funkcja do generowania avatara modelu
+  const getModelAvatar = (modelId: string): string => {
+    const model = getLLMModel(modelId);
+    if (!model) return "🤖";
+
+    switch (model.provider) {
+      case "OpenAI":
+        return "🟢";
+      case "Anthropic":
+        return "🟠";
+      case "Google":
+        return "🔵";
+      case "Meta":
+        return "🟣";
+      default:
+        return "🤖";
+    }
+  };
+
   return (
     <Flex direction="column" h="100%" bg="white">
       {/* Nagłówek */}
@@ -248,28 +312,40 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         top={0}
         zIndex={10}
       >
-        <HStack gap={3}>
-          <Flex
-            align="center"
-            justify="center"
-            w={8}
-            h={8}
-            bg={aiColor}
-            color="white"
-            borderRadius="full"
-            fontSize="sm"
-            flexShrink={0}
-          >
-            {aiAvatar}
-          </Flex>
-          <VStack align="start" gap={0}>
-            <Text fontWeight="600" color="gray.800" fontSize="md">
-              {aiCharName}
-            </Text>
-            <Text fontSize="xs" color="gray.500">
-              Asystent AI
-            </Text>
-          </VStack>
+        <HStack gap={3} justify="space-between">
+          <HStack gap={3}>
+            <Flex
+              align="center"
+              justify="center"
+              w={8}
+              h={8}
+              bg="blue.500"
+              color="white"
+              borderRadius="full"
+              fontSize="sm"
+              flexShrink={0}
+            >
+              {getModelAvatar(selectedModel)}
+            </Flex>
+            <VStack align="start" gap={0}>
+              <Text fontWeight="600" color="gray.800" fontSize="md">
+                {chatTitle || (isNewChat ? "Nowa rozmowa" : "Rozmowa")}
+              </Text>
+              <HStack gap={2}>
+                <Badge
+                  size="sm"
+                  colorScheme="blue"
+                  variant="subtle"
+                  fontSize="xs"
+                >
+                  {currentModel?.name || "Nieznany model"}
+                </Badge>
+                <Text fontSize="xs" color="gray.500">
+                  {currentModel?.provider}
+                </Text>
+              </HStack>
+            </VStack>
+          </HStack>
         </HStack>
       </Box>
 
@@ -325,17 +401,17 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                   justify="center"
                   w={16}
                   h={16}
-                  bg={aiColor}
+                  bg="blue.500"
                   color="white"
                   borderRadius="full"
                   fontSize="2xl"
                   flexShrink={0}
                 >
-                  {aiAvatar}
+                  {getModelAvatar(selectedModel)}
                 </Flex>
                 <VStack gap={3}>
                   <Heading size="lg" color="gray.800" fontWeight="600">
-                    Cześć! Jestem {aiCharName}
+                    Cześć! Jestem {currentModel?.name || "AI"}
                   </Heading>
                   <Text color="gray.600" lineHeight="1.6">
                     Jak mogę Ci dzisiaj pomóc?
@@ -346,6 +422,8 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           ) : (
             messages.map((message) => {
               const isUserMessage = message.role === "user";
+              const messageModel = getLLMModel(message.modelId);
+
               return (
                 <VStack key={message.id} align="stretch" gap={3} w="full">
                   <HStack align="start" gap={3} w="full">
@@ -355,20 +433,38 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                       justify="center"
                       w={8}
                       h={8}
-                      bg={isUserMessage ? "blue.500" : aiColor}
+                      bg={isUserMessage ? "blue.500" : "gray.500"}
                       color="white"
                       borderRadius="full"
                       fontSize="sm"
                       flexShrink={0}
                     >
-                      {isUserMessage ? <Icon as={HiOutlineUser} /> : aiAvatar}
+                      {isUserMessage ? (
+                        <Icon as={HiOutlineUser} />
+                      ) : (
+                        getModelAvatar(message.modelId)
+                      )}
                     </Flex>
 
                     <VStack align="start" gap={2} flex={1} minW={0}>
                       {/* Nazwa */}
-                      <Text fontWeight="600" color="gray.800" fontSize="sm">
-                        {isUserMessage ? user?.username || "Ty" : aiCharName}
-                      </Text>
+                      <HStack gap={2}>
+                        <Text fontWeight="600" color="gray.800" fontSize="sm">
+                          {isUserMessage
+                            ? user?.username || "Ty"
+                            : messageModel?.name || "AI"}
+                        </Text>
+                        {!isUserMessage && (
+                          <Badge
+                            size="xs"
+                            colorScheme="gray"
+                            variant="subtle"
+                            fontSize="10px"
+                          >
+                            {messageModel?.provider}
+                          </Badge>
+                        )}
+                      </HStack>
 
                       {/* Treść wiadomości */}
                       <Box
@@ -458,17 +554,17 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                 justify="center"
                 w={8}
                 h={8}
-                bg={aiColor}
+                bg="gray.500"
                 color="white"
                 borderRadius="full"
                 fontSize="sm"
                 flexShrink={0}
               >
-                {aiAvatar}
+                {getModelAvatar(selectedModel)}
               </Flex>
               <VStack align="start" gap={2} flex={1}>
                 <Text fontWeight="600" color="gray.800" fontSize="sm">
-                  {aiCharName}
+                  {currentModel?.name || "AI"}
                 </Text>
                 <Box
                   bg="gray.50"
@@ -502,59 +598,102 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         bottom={0}
       >
         <Box maxW="4xl" mx="auto">
-          <form onSubmit={handleSendMessage}>
-            <HStack gap={3}>
-              <Input
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage(e as any);
-                  }
+          <VStack gap={3}>
+            {/* Wybór modelu */}
+            <HStack w="full" justify="space-between" align="center">
+              <Text fontSize="sm" color="gray.600" fontWeight="500">
+                Model AI:
+              </Text>
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                style={{
+                  maxWidth: "300px",
+                  background: "white",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "8px",
+                  padding: "8px 12px",
+                  fontSize: "14px",
+                  color: "#374151",
+                  outline: "none",
                 }}
-                placeholder={`Napisz wiadomość do ${aiCharName}...`}
-                disabled={isSending}
-                size="lg"
-                bg="white"
-                border="1px solid"
-                borderColor="gray.300"
-                borderRadius="12px"
-                color="gray.800"
-                _placeholder={{
-                  color: "gray.500",
-                }}
-                _hover={{
-                  borderColor: "gray.400",
-                }}
-                _focus={{
-                  borderColor: "blue.500",
-                  boxShadow: "0 0 0 1px #3182ce",
-                }}
-                transition="all 0.2s ease"
-              />
-              <Button
-                type="submit"
-                size="lg"
-                bg="blue.500"
-                color="white"
-                borderRadius="12px"
-                px={6}
-                disabled={!newMessage.trim() || isSending}
-                loading={isSending}
-                loadingText="Wysyłanie..."
-                _hover={{
-                  bg: "blue.600",
-                }}
-                _active={{
-                  transform: "scale(0.98)",
-                }}
-                transition="all 0.2s ease"
               >
-                <Icon as={HiOutlinePaperAirplane} boxSize={4} />
-              </Button>
+                <optgroup label="Popularne">
+                  {getPopularLLMModels().map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} ({model.provider})
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Wszystkie">
+                  {AVAILABLE_LLM_MODELS.filter((m) => !m.isPopular).map(
+                    (model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name} ({model.provider})
+                      </option>
+                    )
+                  )}
+                </optgroup>
+              </select>
             </HStack>
-          </form>
+
+            {/* Formularz wiadomości */}
+            <form onSubmit={handleSendMessage} style={{ width: "100%" }}>
+              <HStack gap={3}>
+                <Input
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage(e as any);
+                    }
+                  }}
+                  placeholder={`Napisz wiadomość do ${
+                    currentModel?.name || "AI"
+                  }...`}
+                  disabled={isSending}
+                  size="lg"
+                  bg="white"
+                  border="1px solid"
+                  borderColor="gray.300"
+                  borderRadius="12px"
+                  color="gray.800"
+                  _placeholder={{
+                    color: "gray.500",
+                  }}
+                  _hover={{
+                    borderColor: "gray.400",
+                  }}
+                  _focus={{
+                    borderColor: "blue.500",
+                    boxShadow: "0 0 0 1px #3182ce",
+                  }}
+                  transition="all 0.2s ease"
+                />
+                <Button
+                  type="submit"
+                  size="lg"
+                  bg="blue.500"
+                  color="white"
+                  borderRadius="12px"
+                  px={6}
+                  disabled={!newMessage.trim() || isSending}
+                  loading={isSending}
+                  loadingText="Wysyłanie..."
+                  _hover={{
+                    bg: "blue.600",
+                  }}
+                  _active={{
+                    transform: "scale(0.98)",
+                  }}
+                  transition="all 0.2s ease"
+                >
+                  <Icon as={HiOutlinePaperAirplane} boxSize={4} />
+                </Button>
+              </HStack>
+            </form>
+          </VStack>
         </Box>
       </Box>
     </Flex>

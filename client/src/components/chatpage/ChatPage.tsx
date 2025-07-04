@@ -15,13 +15,13 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import AIChatWindow from "./AIChatWindow";
 import SidebarContent from "./SidebarContent";
-import { getAICharacterFrontend } from "../../config/aiCharacters";
 import { HiOutlineChatBubbleLeftEllipsis } from "react-icons/hi2";
 
 // --- Komponent ---
 
 const ChatPage: React.FC = () => {
-  const [activeAIChar, setActiveAIChar] = useState<string | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [isNewChatMode, setIsNewChatMode] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
   const { user } = useAuth();
@@ -56,12 +56,19 @@ const ChatPage: React.FC = () => {
     return () => window.removeEventListener("resize", handleResize);
   }, [isMobile]);
 
-  // Callback dla zamknięcia sidebara po wybraniu asystenta na mobile
-  const handleAICharSelect = () => {
+  // Callback dla zamknięcia sidebara po wybraniu czatu na mobile
+  const handleChatSelect = () => {
     // Zamknij sidebar tylko na mobile (szerokość < 768px)
     if (isMobile) {
       setIsSidebarOpen(false);
     }
+    setIsNewChatMode(false);
+  };
+
+  // Callback dla tworzenia nowego czatu
+  const handleNewChat = () => {
+    setActiveChatId(null);
+    setIsNewChatMode(true);
   };
 
   const toggleSidebar = () => {
@@ -117,9 +124,10 @@ const ChatPage: React.FC = () => {
         display={!isMobile || isSidebarOpen ? "block" : "none"}
       >
         <SidebarContent
-          activeAIChar={activeAIChar}
-          setActiveAIChar={setActiveAIChar}
-          onAICharSelect={handleAICharSelect}
+          activeChatId={activeChatId}
+          setActiveChatId={setActiveChatId}
+          onChatSelect={handleChatSelect}
+          onNewChat={handleNewChat}
         />
       </Box>
 
@@ -148,13 +156,15 @@ const ChatPage: React.FC = () => {
         borderColor="gray.200"
         transition="all 0.3s ease"
       >
-        {activeAIChar ? (
-          (() => {
-            const aiChar = getAICharacterFrontend(activeAIChar);
-            return aiChar ? (
-              <AIChatWindow aiCharId={aiChar.id} aiCharName={aiChar.name} />
-            ) : null;
-          })()
+        {activeChatId || isNewChatMode ? (
+          <AIChatWindow
+            chatId={activeChatId}
+            isNewChat={isNewChatMode}
+            onChatCreated={(newChatId) => {
+              setActiveChatId(newChatId);
+              setIsNewChatMode(false);
+            }}
+          />
         ) : (
           <Flex justify="center" align="center" h="100%" bg="white">
             <VStack gap={8} textAlign="center" maxW="md" px={8}>
@@ -177,12 +187,12 @@ const ChatPage: React.FC = () => {
 
               <VStack gap={4}>
                 <Heading size="lg" color="gray.800" fontWeight="600">
-                  Wybierz Asystenta AI
+                  Wybierz rozmowę lub rozpocznij nową
                 </Heading>
                 <Text color="gray.600" lineHeight="1.6" fontSize="md">
                   {isMobile
-                    ? "Dotknij ikonę menu w lewym górnym rogu, aby wybrać asystenta AI."
-                    : "Wybierz jednego z dostępnych asystentów AI z panelu po lewej stronie, aby rozpocząć rozmowę."}
+                    ? "Dotknij ikonę menu w lewym górnym rogu, aby wybrać rozmowę lub rozpocząć nową."
+                    : "Wybierz jedną z istniejących rozmów z panelu po lewej stronie lub kliknij 'Nowa rozmowa', aby rozpocząć nowy czat."}
                 </Text>
               </VStack>
 
@@ -194,7 +204,7 @@ const ChatPage: React.FC = () => {
                 borderRadius="12px"
               >
                 <Text fontSize="sm" color="blue.700">
-                  💡 Każdy asystent ma unikalną osobowość i specjalizację
+                  💡 Możesz wybierać różne modele AI dla każdej rozmowy
                 </Text>
               </Box>
             </VStack>
