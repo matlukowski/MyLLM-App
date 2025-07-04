@@ -69,95 +69,52 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-    <Flex h="100vh" w="100vw" bg="black" position="relative" overflow="hidden">
-      {/* Animated background */}
-      <Box
-        position="absolute"
-        top="0"
-        left="0"
-        right="0"
-        bottom="0"
-        bgGradient="linear(135deg, gray.900 0%, black 30%, gray.800 70%, black 100%)"
-        opacity={0.8}
-        zIndex={0}
-      />
+    <Flex
+      h="100vh"
+      w="100vw"
+      bg="gray.50"
+      position="relative"
+      overflow="hidden"
+    >
+      {/* Przycisk hamburgera dla mobile */}
+      {isMobile && (
+        <IconButton
+          aria-label="Przełącz menu"
+          onClick={toggleSidebar}
+          position="absolute"
+          top={4}
+          left={4}
+          zIndex={10}
+          size="md"
+          bg="white"
+          color="gray.600"
+          border="1px solid"
+          borderColor="gray.200"
+          borderRadius="8px"
+          _hover={{
+            bg: "gray.50",
+            borderColor: "gray.300",
+          }}
+          _active={{
+            transform: "scale(0.95)",
+          }}
+          transition="all 0.2s ease"
+          boxShadow="sm"
+        >
+          {isSidebarOpen ? <HiXMark /> : <HiBars3 />}
+        </IconButton>
+      )}
 
-      {/* Floating orbs */}
+      {/* Sidebar */}
       <Box
-        position="absolute"
-        top="20%"
-        left="5%"
-        w="200px"
-        h="200px"
-        borderRadius="full"
-        bgGradient="radial(circle, purple.600 0%, transparent 70%)"
-        opacity={0.1}
-        filter="blur(40px)"
-        animation="float 8s ease-in-out infinite"
-        zIndex={1}
-      />
-      <Box
-        position="absolute"
-        bottom="30%"
-        right="10%"
-        w="300px"
-        h="300px"
-        borderRadius="full"
-        bgGradient="radial(circle, blue.500 0%, transparent 70%)"
-        opacity={0.08}
-        filter="blur(60px)"
-        animation="float 12s ease-in-out infinite reverse"
-        zIndex={1}
-      />
-
-      <style>
-        {`
-          @keyframes float {
-            0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-            25% { transform: translateY(-20px) translateX(10px) rotate(1deg); }
-            50% { transform: translateY(0px) translateX(-10px) rotate(-1deg); }
-            75% { transform: translateY(20px) translateX(5px) rotate(0.5deg); }
-          }
-        `}
-      </style>
-
-      {/* Przycisk hamburgera dla wszystkich urządzeń */}
-      <IconButton
-        aria-label="Przełącz menu"
-        onClick={toggleSidebar}
-        position="absolute"
-        top={4}
-        left={4}
-        zIndex={10}
-        size="lg"
-        bg="rgba(0, 0, 0, 0.8)"
-        color="white"
-        border="1px solid"
-        borderColor="rgba(255, 255, 255, 0.2)"
-        borderRadius="12px"
-        backdropFilter="blur(10px)"
-        _hover={{
-          bg: "rgba(0, 0, 0, 0.9)",
-          borderColor: "rgba(255, 255, 255, 0.3)",
-          transform: "scale(1.05)",
-        }}
-        _active={{
-          transform: "scale(0.95)",
-        }}
-        transition="all 0.2s ease"
-      >
-        {isSidebarOpen ? <HiXMark /> : <HiBars3 />}
-      </IconButton>
-
-      {/* Sidebar - zawsze jako overlay, kontrolowany przyciskiem hamburgera */}
-      <Box
-        position="fixed"
+        position={isMobile ? "fixed" : "relative"}
         top={0}
         left={0}
         h="100vh"
-        zIndex={6}
+        zIndex={isMobile ? 6 : 2}
         transform={isSidebarOpen ? "translateX(0)" : "translateX(-100%)"}
         transition="transform 0.3s ease"
+        display={!isMobile || isSidebarOpen ? "block" : "none"}
       >
         <SidebarContent
           activeAIChar={activeAIChar}
@@ -166,13 +123,29 @@ const ChatPage: React.FC = () => {
         />
       </Box>
 
-      {/* Główne okno czatu - dostosowane do stanu sidebara */}
+      {/* Overlay dla mobile */}
+      {isMobile && isSidebarOpen && (
+        <Box
+          position="fixed"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          bg="blackAlpha.300"
+          zIndex={5}
+          onClick={toggleSidebar}
+        />
+      )}
+
+      {/* Główne okno czatu */}
       <Flex
-        w={isSidebarOpen && !isMobile ? "calc(100% - 320px)" : "100%"}
+        w={isSidebarOpen && !isMobile ? "calc(100% - 300px)" : "100%"}
         direction="column"
         position="relative"
-        zIndex={2}
-        ml={isSidebarOpen && !isMobile ? "320px" : 0}
+        zIndex={1}
+        bg="white"
+        borderLeft={isSidebarOpen && !isMobile ? "1px solid" : "none"}
+        borderColor="gray.200"
         transition="all 0.3s ease"
       >
         {activeAIChar ? (
@@ -183,64 +156,45 @@ const ChatPage: React.FC = () => {
             ) : null;
           })()
         ) : (
-          <Flex
-            justify="center"
-            align="center"
-            h="100%"
-            bg="rgba(0, 0, 0, 0.3)"
-            backdropFilter="blur(10px)"
-          >
-            <VStack gap={6} textAlign="center" maxW="md" px={8}>
+          <Flex justify="center" align="center" h="100%" bg="white">
+            <VStack gap={8} textAlign="center" maxW="md" px={8}>
               <Flex
                 align="center"
                 justify="center"
-                w={20}
-                h={20}
-                bgGradient="linear(135deg, purple.500, blue.500, purple.600)"
-                borderRadius="20px"
-                boxShadow="0 8px 32px rgba(147, 51, 234, 0.3)"
-                position="relative"
-                overflow="hidden"
+                w={16}
+                h={16}
+                bg="gray.100"
+                borderRadius="full"
+                border="1px solid"
+                borderColor="gray.200"
               >
                 <Icon
                   as={HiOutlineChatBubbleLeftEllipsis}
-                  boxSize={10}
-                  color="white"
+                  boxSize={8}
+                  color="gray.400"
                 />
               </Flex>
 
-              <VStack gap={3}>
-                <Heading
-                  size="lg"
-                  bgGradient="linear(to-r, white, gray.300)"
-                  bgClip="text"
-                  fontWeight="700"
-                >
+              <VStack gap={4}>
+                <Heading size="lg" color="gray.800" fontWeight="600">
                   Wybierz Asystenta AI
                 </Heading>
-                <Text
-                  color="rgba(255, 255, 255, 0.7)"
-                  lineHeight="1.6"
-                  fontSize="md"
-                >
-                  Kliknij przycisk menu w lewym górnym rogu, aby wybrać jednego
-                  z dostępnych asystentów AI i rozpocząć inteligentną rozmowę.
-                  Każdy asystent ma unikalną osobowość i zaawansowaną pamięć
-                  kontekstową.
+                <Text color="gray.600" lineHeight="1.6" fontSize="md">
+                  {isMobile
+                    ? "Dotknij ikonę menu w lewym górnym rogu, aby wybrać asystenta AI."
+                    : "Wybierz jednego z dostępnych asystentów AI z panelu po lewej stronie, aby rozpocząć rozmowę."}
                 </Text>
               </VStack>
 
               <Box
                 p={4}
-                bg="rgba(255, 255, 255, 0.05)"
+                bg="blue.50"
                 border="1px solid"
-                borderColor="rgba(255, 255, 255, 0.1)"
+                borderColor="blue.200"
                 borderRadius="12px"
-                backdropFilter="blur(10px)"
               >
-                <Text fontSize="sm" color="rgba(255, 255, 255, 0.6)">
-                  💡 Każdy asystent został stworzony z zaawansowanymi
-                  możliwościami AI i pamięta Twoje poprzednie rozmowy
+                <Text fontSize="sm" color="blue.700">
+                  💡 Każdy asystent ma unikalną osobowość i specjalizację
                 </Text>
               </Box>
             </VStack>

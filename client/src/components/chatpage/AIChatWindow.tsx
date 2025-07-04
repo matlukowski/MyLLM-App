@@ -32,7 +32,7 @@ const blinkAnimation = keyframes`
 // Komponent z efektem pisania maszynowego
 interface TypewriterTextProps {
   text: string;
-  speed?: number; // szybkość w ms na znak
+  speed?: number;
   onComplete?: () => void;
 }
 
@@ -70,16 +70,16 @@ const TypewriterText: React.FC<TypewriterTextProps> = ({
     <Text
       fontSize="sm"
       whiteSpace="pre-wrap"
-      lineHeight="1.5"
+      lineHeight="1.6"
       wordBreak="break-word"
-      pr="40px"
       display="inline"
+      color="gray.800"
     >
       {displayedText}
       {!isComplete && (
         <Text
           as="span"
-          color="white"
+          color="gray.400"
           animation={`${blinkAnimation} 1s infinite`}
           fontWeight="normal"
         >
@@ -96,7 +96,7 @@ interface AIMessage {
   timestamp: Date;
   role: "user" | "ai";
   memoriesUsed?: number;
-  isTyping?: boolean; // nowe pole do śledzenia czy wiadomość jest aktualnie pisana
+  isTyping?: boolean;
 }
 
 interface AIChatWindowProps {
@@ -145,12 +145,10 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       setChatId(virtualChatId);
 
       // Dla AI nie pobieramy historii z bazy danych (na razie)
-      // W przyszłości można to rozszerzyć o persystentną historię
       setMessages([]);
       setLoading(false);
     };
     fetchOrCreateChat();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, aiCharId]);
 
   // Wyślij wiadomość do AI z pamięcią długoterminową
@@ -165,7 +163,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     setIsSending(true);
 
     try {
-      // 1. Dodaj wiadomość użytkownika do lokalnego stanu (dla AI nie zapisujemy do bazy)
+      // 1. Dodaj wiadomość użytkownika do lokalnego stanu
       const userMessage: AIMessage = {
         id: `user-${Date.now()}`,
         content: userMessageContent,
@@ -193,12 +191,14 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           chatHistory,
         }),
       });
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(
           errorData.error || "Wystąpił błąd podczas komunikacji z AI"
         );
       }
+
       type AIChatResponse = {
         response: string;
         aiCharacter: string;
@@ -206,14 +206,14 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       };
       const data: AIChatResponse = await response.json();
 
-      // 4. Dodaj odpowiedź AI do lokalnego stanu (dla AI nie zapisujemy do bazy)
+      // 4. Dodaj odpowiedź AI do lokalnego stanu
       const aiMessage: AIMessage = {
         id: `ai-${Date.now()}`,
         content: data.response,
         timestamp: new Date(),
         role: "ai",
         memoriesUsed: data.memoriesUsed,
-        isTyping: true, // oznacz jako pisaną
+        isTyping: true,
       };
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error: any) {
@@ -236,24 +236,54 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
   };
 
   return (
-    <Flex
-      direction="column"
-      h="100%"
-      bg="rgba(0, 0, 0, 0.5)"
-      backdropFilter="blur(10px)"
-    >
+    <Flex direction="column" h="100%" bg="white">
+      {/* Nagłówek */}
+      <Box
+        px={6}
+        py={4}
+        bg="white"
+        borderBottom="1px solid"
+        borderColor="gray.200"
+        position="sticky"
+        top={0}
+        zIndex={10}
+      >
+        <HStack gap={3}>
+          <Flex
+            align="center"
+            justify="center"
+            w={8}
+            h={8}
+            bg={aiColor}
+            color="white"
+            borderRadius="full"
+            fontSize="sm"
+            flexShrink={0}
+          >
+            {aiAvatar}
+          </Flex>
+          <VStack align="start" gap={0}>
+            <Text fontWeight="600" color="gray.800" fontSize="md">
+              {aiCharName}
+            </Text>
+            <Text fontSize="xs" color="gray.500">
+              Asystent AI
+            </Text>
+          </VStack>
+        </HStack>
+      </Box>
+
       {/* Wyświetlanie błędów */}
       {error && (
         <Box
-          bg="rgba(239, 68, 68, 0.1)"
+          bg="red.50"
           border="1px solid"
-          borderColor="rgba(239, 68, 68, 0.3)"
-          color="rgb(252, 165, 165)"
+          borderColor="red.200"
+          color="red.700"
           p={4}
           mx={4}
           mt={4}
-          borderRadius="12px"
-          backdropFilter="blur(10px)"
+          borderRadius="8px"
         >
           <HStack gap={2}>
             <Text fontSize="sm">⚠️</Text>
@@ -266,10 +296,10 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
 
       {/* Lista wiadomości */}
       {loading ? (
-        <Flex justify="center" align="center" flex="1" bg="transparent">
+        <Flex justify="center" align="center" flex="1" bg="white">
           <VStack gap={4}>
-            <Spinner size="xl" color="purple.400" />
-            <Text color="rgba(255, 255, 255, 0.7)" fontSize="sm">
+            <Spinner size="lg" color="blue.500" />
+            <Text color="gray.600" fontSize="sm">
               Ładowanie rozmowy...
             </Text>
           </VStack>
@@ -278,24 +308,38 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         <VStack
           flex="1"
           overflowY="auto"
-          p={6}
+          px={4}
+          py={6}
           align="stretch"
-          gap={4}
-          bg="transparent"
-          style={{ scrollBehavior: "smooth" }}
+          gap={6}
+          bg="white"
+          maxW="4xl"
+          mx="auto"
+          w="full"
         >
           {messages.length === 0 ? (
-            <Flex justify="center" align="center" h="100%">
+            <Flex justify="center" align="center" h="full" py={20}>
               <VStack gap={6} textAlign="center" maxW="md">
+                <Flex
+                  align="center"
+                  justify="center"
+                  w={16}
+                  h={16}
+                  bg={aiColor}
+                  color="white"
+                  borderRadius="full"
+                  fontSize="2xl"
+                  flexShrink={0}
+                >
+                  {aiAvatar}
+                </Flex>
                 <VStack gap={3}>
-                  <Heading
-                    size="lg"
-                    bgGradient="linear(to-r, white, gray.300)"
-                    bgClip="text"
-                    fontWeight="600"
-                  >
+                  <Heading size="lg" color="gray.800" fontWeight="600">
                     Cześć! Jestem {aiCharName}
                   </Heading>
+                  <Text color="gray.600" lineHeight="1.6">
+                    Jak mogę Ci dzisiaj pomóc?
+                  </Text>
                 </VStack>
               </VStack>
             </Flex>
@@ -303,79 +347,46 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
             messages.map((message) => {
               const isUserMessage = message.role === "user";
               return (
-                <Flex
-                  key={message.id}
-                  justify={isUserMessage ? "flex-end" : "flex-start"}
-                  w="full"
-                >
-                  <HStack
-                    maxW="80%"
-                    align="start"
-                    direction={isUserMessage ? "row-reverse" : "row"}
-                    gap={3}
-                  >
+                <VStack key={message.id} align="stretch" gap={3} w="full">
+                  <HStack align="start" gap={3} w="full">
                     {/* Avatar */}
                     <Flex
                       align="center"
                       justify="center"
-                      w={10}
-                      h={10}
-                      bg={isUserMessage ? "purple.600" : aiColor}
-                      borderRadius="12px"
+                      w={8}
+                      h={8}
+                      bg={isUserMessage ? "blue.500" : aiColor}
                       color="white"
-                      fontSize={isUserMessage ? "sm" : "lg"}
+                      borderRadius="full"
+                      fontSize="sm"
                       flexShrink={0}
-                      boxShadow="0 4px 12px rgba(0, 0, 0, 0.2)"
                     >
                       {isUserMessage ? <Icon as={HiOutlineUser} /> : aiAvatar}
                     </Flex>
 
-                    <VStack
-                      align={isUserMessage ? "end" : "start"}
-                      gap={2}
-                      maxW="100%"
-                    >
-                      {/* Message bubble */}
+                    <VStack align="start" gap={2} flex={1} minW={0}>
+                      {/* Nazwa */}
+                      <Text fontWeight="600" color="gray.800" fontSize="sm">
+                        {isUserMessage ? user?.username || "Ty" : aiCharName}
+                      </Text>
+
+                      {/* Treść wiadomości */}
                       <Box
-                        bg={
-                          isUserMessage
-                            ? "rgba(147, 51, 234, 0.9)"
-                            : "rgba(55, 65, 81, 0.9)"
-                        }
-                        color="white"
+                        bg={isUserMessage ? "blue.50" : "gray.50"}
                         px={4}
                         py={3}
-                        borderRadius="18px"
-                        borderBottomRightRadius={isUserMessage ? "6px" : "18px"}
-                        borderBottomLeftRadius={isUserMessage ? "18px" : "6px"}
-                        boxShadow="0 4px 20px rgba(0, 0, 0, 0.15)"
-                        backdropFilter="blur(10px)"
+                        borderRadius="12px"
                         border="1px solid"
-                        borderColor="rgba(255, 255, 255, 0.1)"
+                        borderColor={isUserMessage ? "blue.100" : "gray.200"}
                         position="relative"
-                        overflow="hidden"
-                        _before={
-                          !isUserMessage
-                            ? {
-                                content: '""',
-                                position: "absolute",
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                bgGradient:
-                                  "linear(135deg, rgba(255,255,255,0.05), transparent)",
-                                pointerEvents: "none",
-                              }
-                            : undefined
-                        }
+                        w="full"
+                        role="group"
                       >
                         {!isUserMessage && message.isTyping ? (
                           <TypewriterText
                             text={message.content}
                             speed={5}
                             onComplete={() => {
-                              // Oznacz wiadomość jako zakończoną
                               setMessages((prev) =>
                                 prev.map((msg) =>
                                   msg.id === message.id
@@ -389,24 +400,22 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                           <Text
                             fontSize="sm"
                             whiteSpace="pre-wrap"
-                            lineHeight="1.5"
+                            lineHeight="1.6"
                             wordBreak="break-word"
-                            pr={!isUserMessage ? "40px" : "0"}
-                            pl={isUserMessage ? "40px" : "0"}
+                            color="gray.800"
                           >
                             {message.content}
                           </Text>
                         )}
 
-                        {/* Copy button dla wiadomości AI i użytkownika */}
+                        {/* Copy button */}
                         <Button
                           position="absolute"
                           top={2}
-                          right={!isUserMessage ? 2 : "auto"}
-                          left={isUserMessage ? 2 : "auto"}
+                          right={2}
                           size="xs"
                           variant="ghost"
-                          color="rgba(255, 255, 255, 0.6)"
+                          color="gray.400"
                           minW="auto"
                           h="auto"
                           p={1}
@@ -414,9 +423,12 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                             copyMessage(message.id, message.content)
                           }
                           _hover={{
-                            color: "white",
-                            bg: "rgba(255, 255, 255, 0.1)",
+                            color: "gray.600",
+                            bg: "gray.100",
                           }}
+                          opacity={0}
+                          _groupHover={{ opacity: 1 }}
+                          transition="opacity 0.2s"
                         >
                           <Icon
                             as={
@@ -424,58 +436,57 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                                 ? HiOutlineCheck
                                 : HiOutlineClipboardDocument
                             }
-                            boxSize={4.5}
+                            boxSize={3}
                             color={
-                              copiedId === message.id ? "green.300" : undefined
+                              copiedId === message.id ? "green.500" : undefined
                             }
                           />
                         </Button>
                       </Box>
                     </VStack>
                   </HStack>
-                </Flex>
+                </VStack>
               );
             })
           )}
 
           {/* Wskaźnik pisania */}
           {isSending && (
-            <Flex justify="flex-start" w="full">
-              <HStack align="start" gap={3}>
-                <Flex
-                  align="center"
-                  justify="center"
-                  w={10}
-                  h={10}
-                  bg={aiColor}
-                  borderRadius="12px"
-                  color="white"
-                  fontSize="lg"
-                  flexShrink={0}
-                  boxShadow="0 4px 12px rgba(0, 0, 0, 0.2)"
-                >
-                  {aiAvatar}
-                </Flex>
+            <HStack align="start" gap={3} w="full">
+              <Flex
+                align="center"
+                justify="center"
+                w={8}
+                h={8}
+                bg={aiColor}
+                color="white"
+                borderRadius="full"
+                fontSize="sm"
+                flexShrink={0}
+              >
+                {aiAvatar}
+              </Flex>
+              <VStack align="start" gap={2} flex={1}>
+                <Text fontWeight="600" color="gray.800" fontSize="sm">
+                  {aiCharName}
+                </Text>
                 <Box
-                  bg="rgba(55, 65, 81, 0.9)"
-                  color="white"
+                  bg="gray.50"
                   px={4}
                   py={3}
-                  borderRadius="18px"
-                  borderBottomLeftRadius="6px"
-                  backdropFilter="blur(10px)"
+                  borderRadius="12px"
                   border="1px solid"
-                  borderColor="rgba(255, 255, 255, 0.1)"
+                  borderColor="gray.200"
                 >
                   <HStack gap={2}>
-                    <Spinner size="xs" color="gray.300" />
-                    <Text fontSize="sm" color="gray.300">
-                      {aiCharName} pisze...
+                    <Spinner size="xs" color="gray.400" />
+                    <Text fontSize="sm" color="gray.600">
+                      Pisze...
                     </Text>
                   </HStack>
                 </Box>
-              </HStack>
-            </Flex>
+              </VStack>
+            </HStack>
           )}
           <div ref={messagesEndRef} />
         </VStack>
@@ -483,83 +494,69 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
 
       {/* Formularz wysyłania wiadomości */}
       <Box
-        p={6}
-        bg="rgba(0, 0, 0, 0.8)"
-        backdropFilter="blur(20px)"
+        p={4}
+        bg="white"
         borderTop="1px solid"
-        borderColor="rgba(255, 255, 255, 0.1)"
+        borderColor="gray.200"
+        position="sticky"
+        bottom={0}
       >
-        <form onSubmit={handleSendMessage}>
-          <HStack gap={3}>
-            <Input
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage(e as any);
-                }
-              }}
-              placeholder={`Napisz wiadomość do ${aiCharName}...`}
-              disabled={isSending}
-              size="lg"
-              bg="rgba(255, 255, 255, 0.05)"
-              border="1px solid"
-              borderColor="rgba(255, 255, 255, 0.1)"
-              borderRadius="16px"
-              color="white"
-              _placeholder={{
-                color: "rgba(255, 255, 255, 0.4)",
-              }}
-              _hover={{
-                borderColor: "rgba(255, 255, 255, 0.2)",
-                bg: "rgba(255, 255, 255, 0.08)",
-              }}
-              _focus={{
-                borderColor: "purple.400",
-                boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
-                bg: "rgba(255, 255, 255, 0.08)",
-              }}
-              transition="all 0.2s ease"
-            />
-            <Button
-              type="submit"
-              size="lg"
-              bgGradient="linear(135deg, purple.500, purple.600)"
-              color="white"
-              borderRadius="16px"
-              px={6}
-              disabled={!newMessage.trim() || isSending}
-              loading={isSending}
-              loadingText="Wysyłanie..."
-              _hover={{
-                bgGradient: "linear(135deg, purple.600, purple.700)",
-                transform: "translateY(-1px)",
-                boxShadow: "0 8px 25px rgba(147, 51, 234, 0.3)",
-              }}
-              _active={{
-                transform: "translateY(0px)",
-              }}
-              transition="all 0.2s ease"
-              boxShadow="0 4px 16px rgba(147, 51, 234, 0.2)"
-            >
-              <HStack gap={2}>
+        <Box maxW="4xl" mx="auto">
+          <form onSubmit={handleSendMessage}>
+            <HStack gap={3}>
+              <Input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage(e as any);
+                  }
+                }}
+                placeholder={`Napisz wiadomość do ${aiCharName}...`}
+                disabled={isSending}
+                size="lg"
+                bg="white"
+                border="1px solid"
+                borderColor="gray.300"
+                borderRadius="12px"
+                color="gray.800"
+                _placeholder={{
+                  color: "gray.500",
+                }}
+                _hover={{
+                  borderColor: "gray.400",
+                }}
+                _focus={{
+                  borderColor: "blue.500",
+                  boxShadow: "0 0 0 1px #3182ce",
+                }}
+                transition="all 0.2s ease"
+              />
+              <Button
+                type="submit"
+                size="lg"
+                bg="blue.500"
+                color="white"
+                borderRadius="12px"
+                px={6}
+                disabled={!newMessage.trim() || isSending}
+                loading={isSending}
+                loadingText="Wysyłanie..."
+                _hover={{
+                  bg: "blue.600",
+                }}
+                _active={{
+                  transform: "scale(0.98)",
+                }}
+                transition="all 0.2s ease"
+              >
                 <Icon as={HiOutlinePaperAirplane} boxSize={4} />
-                <Text>Wyślij</Text>
-              </HStack>
-            </Button>
-          </HStack>
-        </form>
+              </Button>
+            </HStack>
+          </form>
+        </Box>
       </Box>
-
-      <style>
-        {`
-          @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-          }
-        `}
-      </style>
     </Flex>
   );
 };
