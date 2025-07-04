@@ -7,6 +7,7 @@ import {
   Text,
   Heading,
   Icon,
+  HStack,
 } from "@chakra-ui/react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -15,6 +16,7 @@ import {
   HiOutlineSparkles,
   HiOutlineUser,
   HiOutlineLockClosed,
+  HiOutlineChatBubbleLeftEllipsis,
 } from "react-icons/hi2";
 import { toast } from "react-toastify";
 
@@ -64,328 +66,238 @@ const AuthForm = () => {
   };
 
   return (
-    <Flex
-      minH="100vh"
-      align="center"
-      justify="center"
-      bgGradient="linear(135deg, gray.900 0%, black 50%, gray.800 100%)"
-      position="relative"
-      overflow="hidden"
-    >
-      {/* Animated background elements */}
-      <Box
-        position="absolute"
-        top="10%"
-        left="10%"
-        w="300px"
-        h="300px"
-        borderRadius="full"
-        bgGradient="radial(circle, purple.600 0%, transparent 70%)"
-        opacity={0.15}
-        filter="blur(60px)"
-        animation="float 6s ease-in-out infinite"
-      />
-      <Box
-        position="absolute"
-        bottom="10%"
-        right="15%"
-        w="400px"
-        h="400px"
-        borderRadius="full"
-        bgGradient="radial(circle, blue.500 0%, transparent 70%)"
-        opacity={0.1}
-        filter="blur(80px)"
-        animation="float 8s ease-in-out infinite reverse"
-      />
+    <Flex minH="100vh" align="center" justify="center" bg="gray.50" p={4}>
+      <Box maxW="400px" w="full">
+        <VStack gap={8}>
+          {/* Logo i nagłówek */}
+          <VStack gap={4} textAlign="center">
+            <Flex
+              align="center"
+              justify="center"
+              w={16}
+              h={16}
+              bg="blue.500"
+              borderRadius="full"
+              boxShadow="lg"
+            >
+              <Icon
+                as={HiOutlineChatBubbleLeftEllipsis}
+                boxSize={8}
+                color="white"
+              />
+            </Flex>
 
-      <style>
-        {`
-          @keyframes float {
-            0%, 100% { transform: translateY(0px) translateX(0px); }
-            33% { transform: translateY(-20px) translateX(10px); }
-            66% { transform: translateY(10px) translateX(-10px); }
-          }
-        `}
-      </style>
-
-      <Box maxW="440px" w="full" mx={4} position="relative">
-        {/* Glassmorphism container */}
-        <Box
-          bg="rgba(255, 255, 255, 0.05)"
-          backdropFilter="blur(20px)"
-          borderRadius="24px"
-          border="1px solid"
-          borderColor="rgba(255, 255, 255, 0.1)"
-          p={10}
-          boxShadow="0 25px 50px -12px rgba(0, 0, 0, 0.8)"
-          transition="all 0.3s ease"
-          _hover={{
-            transform: "translateY(-2px)",
-            boxShadow: "0 32px 64px -12px rgba(0, 0, 0, 0.9)",
-          }}
-        >
-          <VStack gap={8}>
-            {/* Logo and header */}
-            <VStack gap={4}>
-              <Flex
-                align="center"
-                justify="center"
-                w={20}
-                h={20}
-                bgGradient="linear(135deg, purple.500, blue.500, purple.600)"
-                borderRadius="20px"
-                boxShadow="0 8px 32px rgba(147, 51, 234, 0.3)"
-                position="relative"
-                overflow="hidden"
-                _before={{
-                  content: '""',
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  bgGradient:
-                    "linear(45deg, transparent, rgba(255,255,255,0.1), transparent)",
-                  animation: "shimmer 2s infinite",
-                }}
-              >
-                <Icon
-                  as={HiOutlineSparkles}
-                  boxSize={10}
-                  color="white"
-                  zIndex={1}
-                />
-              </Flex>
-
-              <VStack gap={2}>
-                <Heading
-                  size="xl"
-                  bgGradient="linear(to-r, white, gray.300)"
-                  bgClip="text"
-                  textAlign="center"
-                  fontWeight="700"
-                  letterSpacing="-0.02em"
-                >
-                  Chat AI
-                </Heading>
-                <Text
-                  color="rgba(255, 255, 255, 0.7)"
-                  textAlign="center"
-                  fontSize="md"
-                  fontWeight="400"
-                >
-                  {isLogin
-                    ? "Witaj ponownie"
-                    : "Dołącz do przyszłości konwersacji"}
-                </Text>
-              </VStack>
+            <VStack gap={2}>
+              <Heading size="xl" color="gray.800" fontWeight="700">
+                Chat AI
+              </Heading>
+              <Text color="gray.600" fontSize="lg">
+                {isLogin ? "Witaj ponownie" : "Utwórz nowe konto"}
+              </Text>
             </VStack>
+          </VStack>
 
-            {/* Form */}
-            <VStack gap={6} w="full">
-              <Box w="full">
-                <Text
-                  color="rgba(255, 255, 255, 0.8)"
-                  fontSize="sm"
-                  fontWeight="600"
-                  mb={3}
-                  display="flex"
-                  alignItems="center"
-                  gap={2}
-                >
-                  <Icon as={HiOutlineUser} boxSize={4} />
-                  Nazwa użytkownika
-                </Text>
-                <Input
-                  type="text"
-                  size="lg"
-                  h="56px"
-                  bg="rgba(255, 255, 255, 0.05)"
-                  border="1px solid"
-                  borderColor="rgba(255, 255, 255, 0.1)"
-                  borderRadius="16px"
-                  color="white"
-                  fontSize="16px"
-                  _placeholder={{
-                    color: "rgba(255, 255, 255, 0.4)",
-                    fontSize: "16px",
-                  }}
+          {/* Formularz */}
+          <Box
+            w="full"
+            bg="white"
+            borderRadius="16px"
+            boxShadow="xl"
+            border="1px solid"
+            borderColor="gray.200"
+            p={8}
+          >
+            <VStack gap={6}>
+              {/* Przełącznik Login/Register */}
+              <HStack w="full" bg="gray.100" borderRadius="12px" p={1} gap={0}>
+                <Button
+                  flex={1}
+                  size="md"
+                  bg={isLogin ? "white" : "transparent"}
+                  color={isLogin ? "gray.800" : "gray.600"}
+                  border="none"
+                  borderRadius="8px"
+                  boxShadow={isLogin ? "sm" : "none"}
+                  fontWeight={isLogin ? "600" : "500"}
+                  onClick={() => setIsLogin(true)}
                   _hover={{
-                    borderColor: "rgba(255, 255, 255, 0.2)",
-                    bg: "rgba(255, 255, 255, 0.08)",
-                  }}
-                  _focus={{
-                    borderColor: "purple.400",
-                    boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
-                    bg: "rgba(255, 255, 255, 0.08)",
+                    bg: isLogin ? "white" : "gray.200",
                   }}
                   transition="all 0.2s ease"
-                  value={inputs.username}
-                  onChange={(e) =>
-                    setInputs({ ...inputs, username: e.target.value })
-                  }
-                  placeholder="Wpisz swoją nazwę użytkownika"
-                />
-              </Box>
-
-              <Box w="full">
-                <Text
-                  color="rgba(255, 255, 255, 0.8)"
-                  fontSize="sm"
-                  fontWeight="600"
-                  mb={3}
-                  display="flex"
-                  alignItems="center"
-                  gap={2}
                 >
-                  <Icon as={HiOutlineLockClosed} boxSize={4} />
-                  Hasło
-                </Text>
-                <Input
-                  type="password"
-                  size="lg"
-                  h="56px"
-                  bg="rgba(255, 255, 255, 0.05)"
-                  border="1px solid"
-                  borderColor="rgba(255, 255, 255, 0.1)"
-                  borderRadius="16px"
-                  color="white"
-                  fontSize="16px"
-                  _placeholder={{
-                    color: "rgba(255, 255, 255, 0.4)",
-                    fontSize: "16px",
-                  }}
+                  Logowanie
+                </Button>
+                <Button
+                  flex={1}
+                  size="md"
+                  bg={!isLogin ? "white" : "transparent"}
+                  color={!isLogin ? "gray.800" : "gray.600"}
+                  border="none"
+                  borderRadius="8px"
+                  boxShadow={!isLogin ? "sm" : "none"}
+                  fontWeight={!isLogin ? "600" : "500"}
+                  onClick={() => setIsLogin(false)}
                   _hover={{
-                    borderColor: "rgba(255, 255, 255, 0.2)",
-                    bg: "rgba(255, 255, 255, 0.08)",
-                  }}
-                  _focus={{
-                    borderColor: "purple.400",
-                    boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
-                    bg: "rgba(255, 255, 255, 0.08)",
+                    bg: !isLogin ? "white" : "gray.200",
                   }}
                   transition="all 0.2s ease"
-                  value={inputs.password}
-                  onChange={(e) =>
-                    setInputs({ ...inputs, password: e.target.value })
-                  }
-                  placeholder="Wpisz swoje hasło"
-                />
-              </Box>
+                >
+                  Rejestracja
+                </Button>
+              </HStack>
 
-              {!isLogin && (
+              {/* Pola formularza */}
+              <VStack gap={4} w="full">
                 <Box w="full">
-                  <Text
-                    color="rgba(255, 255, 255, 0.8)"
-                    fontSize="sm"
-                    fontWeight="600"
-                    mb={3}
-                    display="flex"
-                    alignItems="center"
-                    gap={2}
-                  >
-                    <Icon as={HiOutlineLockClosed} boxSize={4} />
-                    Potwierdź hasło
+                  <Text color="gray.700" fontSize="sm" fontWeight="600" mb={2}>
+                    Nazwa użytkownika
+                  </Text>
+                  <Input
+                    type="text"
+                    size="lg"
+                    bg="white"
+                    border="2px solid"
+                    borderColor="gray.200"
+                    borderRadius="12px"
+                    color="gray.800"
+                    fontSize="16px"
+                    _placeholder={{
+                      color: "gray.500",
+                    }}
+                    _hover={{
+                      borderColor: "gray.300",
+                    }}
+                    _focus={{
+                      borderColor: "blue.500",
+                      boxShadow: "0 0 0 1px #3182ce",
+                    }}
+                    transition="all 0.2s ease"
+                    value={inputs.username}
+                    onChange={(e) =>
+                      setInputs({ ...inputs, username: e.target.value })
+                    }
+                    placeholder="Wpisz swoją nazwę użytkownika"
+                  />
+                </Box>
+
+                <Box w="full">
+                  <Text color="gray.700" fontSize="sm" fontWeight="600" mb={2}>
+                    Hasło
                   </Text>
                   <Input
                     type="password"
                     size="lg"
-                    h="56px"
-                    bg="rgba(255, 255, 255, 0.05)"
-                    border="1px solid"
-                    borderColor="rgba(255, 255, 255, 0.1)"
-                    borderRadius="16px"
-                    color="white"
+                    bg="white"
+                    border="2px solid"
+                    borderColor="gray.200"
+                    borderRadius="12px"
+                    color="gray.800"
                     fontSize="16px"
                     _placeholder={{
-                      color: "rgba(255, 255, 255, 0.4)",
-                      fontSize: "16px",
+                      color: "gray.500",
                     }}
                     _hover={{
-                      borderColor: "rgba(255, 255, 255, 0.2)",
-                      bg: "rgba(255, 255, 255, 0.08)",
+                      borderColor: "gray.300",
                     }}
                     _focus={{
-                      borderColor: "purple.400",
-                      boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
-                      bg: "rgba(255, 255, 255, 0.08)",
+                      borderColor: "blue.500",
+                      boxShadow: "0 0 0 1px #3182ce",
                     }}
                     transition="all 0.2s ease"
-                    value={inputs.confirmPassword}
+                    value={inputs.password}
                     onChange={(e) =>
-                      setInputs({ ...inputs, confirmPassword: e.target.value })
+                      setInputs({ ...inputs, password: e.target.value })
                     }
-                    placeholder="Potwierdź swoje hasło"
+                    placeholder="Wpisz swoje hasło"
                   />
                 </Box>
-              )}
 
+                {!isLogin && (
+                  <Box w="full">
+                    <Text
+                      color="gray.700"
+                      fontSize="sm"
+                      fontWeight="600"
+                      mb={2}
+                    >
+                      Potwierdź hasło
+                    </Text>
+                    <Input
+                      type="password"
+                      size="lg"
+                      bg="white"
+                      border="2px solid"
+                      borderColor="gray.200"
+                      borderRadius="12px"
+                      color="gray.800"
+                      fontSize="16px"
+                      _placeholder={{
+                        color: "gray.500",
+                      }}
+                      _hover={{
+                        borderColor: "gray.300",
+                      }}
+                      _focus={{
+                        borderColor: "blue.500",
+                        boxShadow: "0 0 0 1px #3182ce",
+                      }}
+                      transition="all 0.2s ease"
+                      value={inputs.confirmPassword}
+                      onChange={(e) =>
+                        setInputs({
+                          ...inputs,
+                          confirmPassword: e.target.value,
+                        })
+                      }
+                      placeholder="Potwierdź swoje hasło"
+                    />
+                  </Box>
+                )}
+              </VStack>
+
+              {/* Przycisk submit */}
               <Button
                 w="full"
-                h="56px"
-                fontSize="16px"
-                fontWeight="600"
-                bgGradient="linear(135deg, purple.500, blue.500)"
+                size="lg"
+                bg="blue.500"
                 color="white"
-                borderRadius="16px"
-                border="none"
+                borderRadius="12px"
+                fontWeight="600"
                 onClick={handleAuth}
                 loading={isLoading}
                 loadingText={isLogin ? "Logowanie..." : "Rejestracja..."}
                 _hover={{
-                  bgGradient: "linear(135deg, purple.600, blue.600)",
+                  bg: "blue.600",
                   transform: "translateY(-1px)",
-                  boxShadow: "0 12px 24px rgba(147, 51, 234, 0.3)",
+                  boxShadow: "lg",
                 }}
                 _active={{
                   transform: "translateY(0px)",
                 }}
                 transition="all 0.2s ease"
-                boxShadow="0 8px 16px rgba(147, 51, 234, 0.2)"
+                boxShadow="md"
               >
                 {isLogin ? "Zaloguj się" : "Utwórz konto"}
               </Button>
             </VStack>
+          </Box>
 
-            {/* Toggle between login/register */}
-            <Box
-              textAlign="center"
-              pt={2}
-              borderTop="1px solid"
-              borderColor="rgba(255, 255, 255, 0.1)"
-              w="full"
-            >
-              <Text color="rgba(255, 255, 255, 0.6)" fontSize="sm" mb={3}>
-                {isLogin ? "Nie masz jeszcze konta?" : "Masz już konto?"}
-              </Text>
-              <Button
-                variant="ghost"
-                size="sm"
-                color="purple.300"
-                fontWeight="600"
-                onClick={() => setIsLogin(!isLogin)}
-                _hover={{
-                  color: "purple.200",
-                  bg: "rgba(147, 51, 234, 0.1)",
-                }}
-                borderRadius="12px"
-                transition="all 0.2s ease"
-              >
-                {isLogin ? "Zarejestruj się" : "Zaloguj się"}
-              </Button>
-            </Box>
-          </VStack>
-        </Box>
+          {/* Dodatkowe informacje */}
+          <Box
+            textAlign="center"
+            p={4}
+            bg="blue.50"
+            borderRadius="12px"
+            border="1px solid"
+            borderColor="blue.200"
+            w="full"
+          >
+            <Text fontSize="sm" color="blue.700" fontWeight="500">
+              💡 Każdy asystent AI ma unikalną osobowość i specjalizację
+            </Text>
+          </Box>
+        </VStack>
       </Box>
-
-      <style>
-        {`
-          @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-          }
-        `}
-      </style>
     </Flex>
   );
 };
