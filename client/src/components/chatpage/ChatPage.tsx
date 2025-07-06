@@ -12,7 +12,6 @@ import {
   IconButton,
 } from "@chakra-ui/react";
 import { useAuth } from "../../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
 import AIChatWindow from "./AIChatWindow";
 import SidebarContent from "./SidebarContent";
 import { HiOutlineChatBubbleLeftEllipsis } from "react-icons/hi2";
@@ -25,15 +24,6 @@ const ChatPage: React.FC = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
   const { user } = useAuth();
-  const navigate = useNavigate();
-
-  // Sprawdź czy użytkownik jest zalogowany
-  useEffect(() => {
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
-  }, [user, navigate]);
 
   // Obsługa zmiany rozmiaru okna
   useEffect(() => {
