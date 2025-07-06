@@ -68,6 +68,13 @@ const ChatPage: React.FC = () => {
     setIsNewChatMode(true);
   };
 
+  // Callback do odświeżania listy czatów po utworzeniu nowego
+  const handleChatCreated = (newChatId: string) => {
+    setActiveChatId(newChatId);
+    setIsNewChatMode(false);
+    // Tutaj można dodać logikę odświeżania listy czatów w sidebarze
+  };
+
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
@@ -158,10 +165,7 @@ const ChatPage: React.FC = () => {
           <AIChatWindow
             chatId={activeChatId}
             isNewChat={isNewChatMode}
-            onChatCreated={(newChatId) => {
-              setActiveChatId(newChatId);
-              setIsNewChatMode(false);
-            }}
+            onChatCreated={handleChatCreated}
           />
         ) : (
           <Flex justify="center" align="center" h="100%" bg="white">

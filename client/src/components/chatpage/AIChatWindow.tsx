@@ -160,30 +160,50 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       return;
     }
 
-    // TODO: Załaduj historię czatu z backendu
-    // Na razie używamy dummy data
-    setLoading(true);
-    setTimeout(() => {
-      setMessages([
-        {
-          id: "msg-1",
-          content: "Cześć! Jak mogę Ci pomóc?",
-          timestamp: new Date(Date.now() - 1000 * 60 * 5),
-          role: "assistant",
-          modelId: "gpt-4-turbo",
-        },
-        {
-          id: "msg-2",
-          content: "Potrzebuję pomocy z kodem React",
-          timestamp: new Date(Date.now() - 1000 * 60 * 3),
-          role: "user",
-          modelId: "gpt-4-turbo",
-        },
-      ]);
-      setChatTitle("Pomoc z kodem React");
-      setLoading(false);
-    }, 500);
-  }, [chatId, isNewChat]);
+    // Załaduj historię czatu z backendu
+    const loadChatHistory = async () => {
+      setLoading(true);
+      try {
+        const response = await fetch(
+          `http://localhost:3001/api/chats/${chatId}/messages`
+        );
+        if (response.ok) {
+          const messagesData = await response.json();
+
+          // Konwertuj wiadomości z backendu na format komponentu
+          const formattedMessages: ChatMessage[] = messagesData.map(
+            (msg: any) => ({
+              id: msg.id,
+              content: msg.content,
+              timestamp: new Date(msg.createdAt),
+              role: msg.senderId === user?.id ? "user" : "assistant",
+              modelId: "gpt-4-turbo", // Domyślny model, można pobrać z metadanych czatu
+            })
+          );
+
+          setMessages(formattedMessages);
+
+          // Pobierz tytuł czatu
+          const chatResponse = await fetch(
+            `http://localhost:3001/api/chats?userId=${user?.id}`
+          );
+          if (chatResponse.ok) {
+            const chats = await chatResponse.json();
+            const currentChat = chats.find((chat: any) => chat.id === chatId);
+            if (currentChat) {
+              setChatTitle(currentChat.title || "Rozmowa");
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Błąd podczas ładowania historii czatu:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadChatHistory();
+  }, [chatId, isNewChat, user?.id]);
 
   // Wyślij wiadomość do AI
   const handleSendMessage = async (e: React.FormEvent) => {

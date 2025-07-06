@@ -166,7 +166,25 @@ app.get("/api/chats", async (req: Request, res: Response) => {
       },
     });
 
-    const chats = userChatParticipants.map((p) => p.chat);
+    const chats = userChatParticipants.map((p) => {
+      const chat = p.chat;
+      const lastMessage = chat.messages[0];
+      const metadata = chat.metadata as any;
+
+      return {
+        id: chat.id,
+        title: chat.title || "Nowa rozmowa",
+        lastMessage: lastMessage?.content || "",
+        lastMessageTime: lastMessage?.createdAt || chat.createdAt,
+        messageCount: chat.messages.length,
+        modelId: metadata?.modelId || "unknown",
+        userId: loggedInUserId,
+        isAIChat: metadata?.isAIChat || false,
+        createdAt: chat.createdAt,
+        updatedAt: chat.updatedAt,
+      };
+    });
+
     res.json(chats);
   } catch (error) {
     console.error("Error fetching chats:", error);
@@ -288,9 +306,57 @@ app.post("/api/chats", async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint do tworzenia nowego czatu AI
+app.post("/api/ai/chats", async (req: Request, res: Response) => {
+  const { userId, title, modelId } = req.body;
+
+  if (!userId || !title || !modelId) {
+    return res.status(400).json({
+      error: "userId, title i modelId są wymagane",
+    });
+  }
+
+  try {
+    // Utwórz nowy czat AI
+    const newChat = await prisma.chat.create({
+      data: {
+        title,
+        participants: {
+          create: [
+            { userId },
+            { userId: "ai-assistant" }, // Specjalny ID dla AI
+          ],
+        },
+        // Dodaj metadane czatu AI
+        metadata: {
+          modelId,
+          isAIChat: true,
+        } as any,
+      },
+      include: {
+        participants: {
+          include: {
+            user: { select: { id: true, username: true } },
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    console.log("✅ Utworzono nowy czat AI:", newChat.id);
+    res.status(201).json(newChat);
+  } catch (error) {
+    console.error("❌ Błąd tworzenia czatu AI:", error);
+    res.status(500).json({ error: "Nie udało się utworzyć czatu AI" });
+  }
+});
+
 // Endpoint do czatu z AI (z pamięcią długoterminową RAG)
 app.post("/api/ai/chat", async (req: Request, res: Response) => {
-  const { userId, modelId, userMessage, chatHistory } = req.body;
+  const { userId, modelId, userMessage, chatHistory, chatId } = req.body;
 
   if (!userId || !modelId || !userMessage) {
     return res.status(400).json({
@@ -299,6 +365,43 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
   }
 
   try {
+    let currentChatId = chatId;
+    let chatTitle = "";
+
+    // Jeśli nie ma chatId, utwórz nowy czat
+    if (!currentChatId) {
+      // Wygeneruj tytuł na podstawie pierwszej wiadomości (pierwsze 50 znaków)
+      chatTitle =
+        userMessage.length > 50
+          ? userMessage.substring(0, 50) + "..."
+          : userMessage;
+
+      const newChat = await prisma.chat.create({
+        data: {
+          title: chatTitle,
+          participants: {
+            create: [{ userId }, { userId: "ai-assistant" }],
+          },
+          metadata: {
+            modelId,
+            isAIChat: true,
+          } as any,
+        },
+      });
+
+      currentChatId = newChat.id;
+      console.log("✅ Utworzono nowy czat AI:", currentChatId);
+    }
+
+    // Zapisz wiadomość użytkownika
+    await prisma.message.create({
+      data: {
+        content: userMessage,
+        senderId: userId,
+        chatId: currentChatId,
+      },
+    });
+
     // Przygotuj dane dla serwisu RAG z domyślnym promptem
     const ragRequest = {
       userId,
@@ -314,6 +417,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       modelId,
       userMessage: userMessage.substring(0, 50) + "...",
       historyLength: chatHistory?.length || 0,
+      chatId: currentChatId,
     });
 
     // Wyślij żądanie do serwisu RAG
@@ -331,9 +435,25 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     const aiResponse = ragResponse.data.response;
     const memoriesUsed = ragResponse.data.memories_used || 0;
 
+    // Zapisz odpowiedź AI
+    await prisma.message.create({
+      data: {
+        content: aiResponse,
+        senderId: "ai-assistant",
+        chatId: currentChatId,
+      },
+    });
+
+    // Zaktualizuj czas ostatniej modyfikacji czatu
+    await prisma.chat.update({
+      where: { id: currentChatId },
+      data: { updatedAt: new Date() },
+    });
+
     console.log("✅ Otrzymano odpowiedź z serwisu RAG:", {
       responseLength: aiResponse.length,
       memoriesUsed,
+      chatId: currentChatId,
     });
 
     res.json({
@@ -343,6 +463,8 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
           : JSON.stringify(aiResponse),
       modelId: modelId,
       memoriesUsed,
+      chatId: currentChatId,
+      chatTitle: chatTitle || undefined,
     });
   } catch (error: any) {
     console.error("❌ Błąd komunikacji z serwisem RAG:", error.message);
