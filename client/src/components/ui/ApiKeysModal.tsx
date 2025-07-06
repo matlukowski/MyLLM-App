@@ -271,7 +271,7 @@ const ApiKeysModal: React.FC<ApiKeysModalProps> = ({ isOpen, onClose }) => {
                               })
                             }
                             placeholder={provider.placeholder}
-                            type="password"
+                            type="text"
                             fontSize="sm"
                             fontFamily="mono"
                           />
