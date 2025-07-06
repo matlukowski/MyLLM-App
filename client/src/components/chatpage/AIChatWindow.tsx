@@ -309,14 +309,20 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         modelId: selectedModel,
         isTyping: true,
       };
+
       setMessages((prev) => [...prev, aiMessage]);
 
-      // 7. Symuluj streaming poprzez stopniowe dodawanie tekstu
+      // 7. Zakończ stan wysyłania zaraz po otrzymaniu odpowiedzi
+      setIsSending(false);
+
+      // 8. Dodaj małe opóźnienie aby UI zdążyło się przerenderować
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // 9. Symuluj streaming poprzez stopniowe dodawanie tekstu
       await simulateStreaming(aiMessageId, data.response);
     } catch (error: any) {
       console.error("Błąd podczas wysyłania wiadomości do AI:", error);
       setError(error.message || "Wystąpił nieoczekiwany błąd");
-    } finally {
       setIsSending(false);
     }
   };
