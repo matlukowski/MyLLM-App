@@ -29,6 +29,8 @@ import {
   getPopularLLMModels,
   type LLMModel,
 } from "../../types/types";
+import MarkdownRenderer from "../ui/MarkdownRenderer";
+import TypewriterMarkdown from "../ui/TypewriterMarkdown";
 
 // Animacja migającego kursora
 const blinkAnimation = keyframes`
@@ -485,8 +487,18 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                         w="full"
                         role="group"
                       >
-                        {!isUserMessage && message.isTyping ? (
-                          <TypewriterText
+                        {isUserMessage ? (
+                          <Text
+                            fontSize="sm"
+                            whiteSpace="pre-wrap"
+                            lineHeight="1.6"
+                            wordBreak="break-word"
+                            color="gray.800"
+                          >
+                            {message.content}
+                          </Text>
+                        ) : message.isTyping ? (
+                          <TypewriterMarkdown
                             text={message.content}
                             speed={5}
                             onComplete={() => {
@@ -500,15 +512,12 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                             }}
                           />
                         ) : (
-                          <Text
+                          <MarkdownRenderer
+                            content={message.content}
                             fontSize="sm"
-                            whiteSpace="pre-wrap"
                             lineHeight="1.6"
-                            wordBreak="break-word"
                             color="gray.800"
-                          >
-                            {message.content}
-                          </Text>
+                          />
                         )}
 
                         {/* Copy button */}
