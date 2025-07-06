@@ -53,60 +53,48 @@ export interface ChatMessage {
   modelId: string;
 }
 
+// Typy dla kluczy API
+export interface ApiKey {
+  id: string;
+  provider: string;
+  key: string;
+  isActive: boolean;
+}
+
 // Konfiguracja dostępnych modeli LLM
 export const AVAILABLE_LLM_MODELS: LLMModel[] = [
   {
-    id: "gpt-4-turbo",
-    name: "GPT-4 Turbo",
+    id: "gpt-4.1",
+    name: "GPT-4.1",
     provider: "OpenAI",
-    description: "Najnowszy model GPT-4 z rozszerzonymi możliwościami",
+    description: "Najnowszy model GPT-4.1 z ulepszonymi możliwościami",
     maxTokens: 128000,
     isPopular: true,
   },
+
   {
-    id: "gpt-4",
-    name: "GPT-4",
-    provider: "OpenAI",
-    description: "Zaawansowany model językowy GPT-4",
-    maxTokens: 8192,
-    isPopular: true,
-  },
-  {
-    id: "claude-3-5-sonnet",
-    name: "Claude 3.5 Sonnet",
+    id: "claude-4-sonnet",
+    name: "Claude 4 Sonnet",
     provider: "Anthropic",
-    description: "Najnowszy model Claude z ulepszonymi możliwościami",
+    description: "Najnowszy model Claude 4 z zaawansowanymi możliwościami",
     maxTokens: 200000,
     isPopular: true,
   },
+  {
+    id: "gemini-flash-2.5",
+    name: "Gemini Flash 2.5",
+    provider: "Google",
+    description: "Szybki i wydajny model Gemini Flash 2.5",
+    maxTokens: 32768,
+    isPopular: true,
+  },
+
   {
     id: "claude-3-opus",
     name: "Claude 3 Opus",
     provider: "Anthropic",
-    description: "Najbardziej zaawansowany model Claude",
+    description: "Najbardziej zaawansowany model Claude 3",
     maxTokens: 200000,
-    isPopular: true,
-  },
-  {
-    id: "claude-3-haiku",
-    name: "Claude 3 Haiku",
-    provider: "Anthropic",
-    description: "Szybki i ekonomiczny model Claude",
-    maxTokens: 200000,
-  },
-  {
-    id: "gemini-pro",
-    name: "Gemini Pro",
-    provider: "Google",
-    description: "Zaawansowany model językowy od Google",
-    maxTokens: 32768,
-  },
-  {
-    id: "llama-2-70b",
-    name: "Llama 2 70B",
-    provider: "Meta",
-    description: "Open-source model językowy Meta",
-    maxTokens: 4096,
   },
 ];
 

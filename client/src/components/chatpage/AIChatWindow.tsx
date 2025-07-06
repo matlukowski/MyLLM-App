@@ -124,7 +124,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>(
-    getPopularLLMModels()[0]?.id || "gpt-4-turbo"
+    getPopularLLMModels()[0]?.id || "gpt-4.1"
   );
   const [chatTitle, setChatTitle] = useState<string>("");
   const { user } = useAuth();
