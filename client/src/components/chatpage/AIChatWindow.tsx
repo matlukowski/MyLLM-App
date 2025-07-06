@@ -220,7 +220,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       );
 
       // Dodaj małe opóźnienie między słowami
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 25));
     }
 
     // Zakończ streaming
