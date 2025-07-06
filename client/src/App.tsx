@@ -3,8 +3,10 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Box, Spinner, Flex } from "@chakra-ui/react";
+import { useState } from "react";
 import AuthPage from "./components/pages/AuthPage/AuthPage";
 import ChatPage from "./components/chatpage/ChatPage";
+import ApiKeysModal from "./components/ui/ApiKeysModal";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 // Komponent do ochrony tras
@@ -38,26 +40,41 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 function AppContent() {
+  const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
+
+  const handleApiKeysOpen = () => {
+    setIsApiKeysModalOpen(true);
+  };
+
+  const handleApiKeysClose = () => {
+    setIsApiKeysModalOpen(false);
+  };
+
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/chat" replace />} />
-      <Route
-        path="/auth"
-        element={
-          <PublicRoute>
-            <AuthPage />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/chat"
-        element={
-          <ProtectedRoute>
-            <ChatPage />
-          </ProtectedRoute>
-        }
-      />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<Navigate to="/chat" replace />} />
+        <Route
+          path="/auth"
+          element={
+            <PublicRoute>
+              <AuthPage />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <ChatPage onApiKeysOpen={handleApiKeysOpen} />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+
+      {/* Modal kluczy API */}
+      <ApiKeysModal isOpen={isApiKeysModalOpen} onClose={handleApiKeysClose} />
+    </>
   );
 }
 

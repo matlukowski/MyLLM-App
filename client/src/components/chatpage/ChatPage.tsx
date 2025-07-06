@@ -16,9 +16,15 @@ import AIChatWindow from "./AIChatWindow";
 import SidebarContent from "./SidebarContent";
 import { HiOutlineChatBubbleLeftEllipsis } from "react-icons/hi2";
 
+// --- Interfejs ---
+
+interface ChatPageProps {
+  onApiKeysOpen?: () => void;
+}
+
 // --- Komponent ---
 
-const ChatPage: React.FC = () => {
+const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isNewChatMode, setIsNewChatMode] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -133,6 +139,7 @@ const ChatPage: React.FC = () => {
           onChatSelect={handleChatSelect}
           onNewChat={handleNewChat}
           onCloseSidebar={handleCloseSidebar}
+          onApiKeysOpen={onApiKeysOpen}
         />
       </Box>
 

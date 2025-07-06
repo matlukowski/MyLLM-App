@@ -22,7 +22,6 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Chat, getLLMModel } from "../../types/types";
-import ApiKeysModal from "../ui/ApiKeysModal";
 import DeleteChatModal from "../ui/DeleteChatModal";
 import { useEffect } from "react";
 import { getChats, deleteChatById } from "../../../../server/src/api/chatApi";
@@ -34,6 +33,7 @@ interface SidebarContentProps {
   onChatSelect?: () => void; // Callback wywoływany po wyborze czatu (dla mobile drawer)
   onNewChat?: () => void; // Callback wywoływany po kliknięciu "Nowa rozmowa"
   onCloseSidebar?: () => void; // Callback tylko dla zamykania sidebara na mobile
+  onApiKeysOpen?: () => void; // Callback do otwierania modalu kluczy API
 }
 
 const SidebarContent: React.FC<SidebarContentProps> = ({
@@ -42,10 +42,10 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
   onChatSelect,
   onNewChat,
   onCloseSidebar,
+  onApiKeysOpen,
 }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
   const [isDeletingChat, setIsDeletingChat] = useState(false);
@@ -394,7 +394,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
 
               <HStack gap={2}>
                 <Button
-                  onClick={() => setIsApiKeysModalOpen(true)}
+                  onClick={onApiKeysOpen}
                   size="sm"
                   bg="transparent"
                   color="gray.400"
@@ -441,12 +441,6 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
           </VStack>
         </Box>
       </Flex>
-
-      {/* Modal kluczy API */}
-      <ApiKeysModal
-        isOpen={isApiKeysModalOpen}
-        onClose={() => setIsApiKeysModalOpen(false)}
-      />
 
       {/* Modal usuwania czatu */}
       <DeleteChatModal

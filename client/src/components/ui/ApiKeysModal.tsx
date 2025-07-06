@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
+  Dialog,
+  Portal,
+  CloseButton,
   Box,
   VStack,
   HStack,
@@ -16,7 +19,6 @@ import {
   HiOutlineEye,
   HiOutlineEyeSlash,
   HiOutlineTrash,
-  HiOutlineXMark,
 } from "react-icons/hi2";
 import { ApiKey } from "../../types/types";
 import { toast } from "react-toastify";
@@ -134,183 +136,154 @@ const ApiKeysModal: React.FC<ApiKeysModalProps> = ({ isOpen, onClose }) => {
     return `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
   };
 
-  if (!isOpen) return null;
-
   return (
-    <Box
-      position="fixed"
-      top={0}
-      left={0}
-      right={0}
-      bottom={0}
-      bg="rgba(0, 0, 0, 0.5)"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      zIndex={1000}
-      p={4}
+    <Dialog.Root
+      open={isOpen}
+      onOpenChange={(e) => !e.open && onClose()}
+      size="xl"
     >
-      <Box
-        bg="white"
-        borderRadius="16px"
-        boxShadow="xl"
-        maxW="600px"
-        w="full"
-        maxH="80vh"
-        overflowY="auto"
-        position="relative"
-      >
-        {/* Header */}
-        <Flex
-          justify="space-between"
-          align="center"
-          p={6}
-          borderBottom="1px solid"
-          borderColor="gray.200"
-        >
-          <Heading size="lg" color="gray.800">
-            Klucze API
-          </Heading>
-          <IconButton
-            aria-label="Zamknij"
-            size="sm"
-            variant="ghost"
-            onClick={onClose}
-          >
-            <Icon as={HiOutlineXMark} />
-          </IconButton>
-        </Flex>
+      <Portal>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content maxW="1200px" maxH="80vh">
+            <Dialog.Header>
+              <Dialog.Title>
+                <Heading size="lg" color="gray.800">
+                  Klucze API
+                </Heading>
+              </Dialog.Title>
+              <Dialog.CloseTrigger asChild>
+                <CloseButton size="sm" />
+              </Dialog.CloseTrigger>
+            </Dialog.Header>
 
-        {/* Body */}
-        <Box p={6}>
-          <VStack gap={6} align="stretch">
-            <Box
-              bg="blue.50"
-              border="1px solid"
-              borderColor="blue.200"
-              borderRadius="md"
-              p={4}
-            >
-              <Text fontSize="sm" color="blue.700">
-                ℹ️ Klucze API są przechowywane lokalnie w Twojej przeglądarce i
-                nie są wysyłane na nasze serwery.
-              </Text>
-            </Box>
-
-            {API_PROVIDERS.map((provider, index) => {
-              const existingKey = getKeyForProvider(provider.id);
-              const keyId = existingKey?.id || "";
-
-              return (
-                <Box key={provider.id}>
-                  <VStack align="stretch" gap={3}>
-                    <HStack justify="space-between">
-                      <VStack align="start" gap={1}>
-                        <HStack gap={2}>
-                          <Text fontWeight="600" fontSize="md">
-                            {provider.name}
-                          </Text>
-                          {existingKey && (
-                            <Badge colorScheme="green" size="sm">
-                              Skonfigurowany
-                            </Badge>
-                          )}
-                        </HStack>
-                        <Text fontSize="sm" color="gray.600">
-                          {provider.description}
-                        </Text>
-                      </VStack>
-                    </HStack>
-
-                    {existingKey ? (
-                      <HStack gap={2}>
-                        <Input
-                          value={
-                            showKeys[keyId]
-                              ? existingKey.key
-                              : maskApiKey(existingKey.key)
-                          }
-                          readOnly
-                          bg="gray.50"
-                          fontSize="sm"
-                          fontFamily="mono"
-                        />
-                        <IconButton
-                          aria-label="Pokaż/ukryj klucz"
-                          size="sm"
-                          onClick={() => toggleKeyVisibility(keyId)}
-                        >
-                          <Icon
-                            as={
-                              showKeys[keyId] ? HiOutlineEyeSlash : HiOutlineEye
-                            }
-                          />
-                        </IconButton>
-                        <IconButton
-                          aria-label="Usuń klucz"
-                          size="sm"
-                          colorScheme="red"
-                          variant="outline"
-                          onClick={() => handleDeleteKey(keyId)}
-                        >
-                          <Icon as={HiOutlineTrash} />
-                        </IconButton>
-                      </HStack>
-                    ) : (
-                      <Box>
-                        <Text fontSize="sm" fontWeight="600" mb={2}>
-                          Klucz API
-                        </Text>
-                        <HStack gap={2}>
-                          <Input
-                            value={newKeys[provider.id] || ""}
-                            onChange={(e) =>
-                              setNewKeys({
-                                ...newKeys,
-                                [provider.id]: e.target.value,
-                              })
-                            }
-                            placeholder={provider.placeholder}
-                            type="text"
-                            fontSize="sm"
-                            fontFamily="mono"
-                            color="gray.800"
-                          />
-                          <Button
-                            onClick={() => handleSaveKey(provider.id)}
-                            size="sm"
-                            colorScheme="blue"
-                            disabled={!newKeys[provider.id]?.trim()}
-                          >
-                            Zapisz
-                          </Button>
-                        </HStack>
-                        <Text fontSize="xs" color="gray.500" mt={1}>
-                          {provider.helpText}
-                        </Text>
-                      </Box>
-                    )}
-                  </VStack>
-                  {index < API_PROVIDERS.length - 1 && (
-                    <Box w="full" h="1px" bg="gray.200" mt={4} />
-                  )}
+            <Dialog.Body overflowY="auto">
+              <VStack gap={6} align="stretch">
+                <Box
+                  bg="blue.50"
+                  border="1px solid"
+                  borderColor="blue.200"
+                  borderRadius="md"
+                  p={4}
+                >
+                  <Text fontSize="sm" color="blue.700">
+                    ℹ️ Klucze API są przechowywane lokalnie w Twojej
+                    przeglądarce i nie są wysyłane na nasze serwery.
+                  </Text>
                 </Box>
-              );
-            })}
-          </VStack>
-        </Box>
 
-        {/* Footer */}
-        <Flex
-          justify="flex-end"
-          p={6}
-          borderTop="1px solid"
-          borderColor="gray.200"
-        >
-          <Button onClick={onClose}>Zamknij</Button>
-        </Flex>
-      </Box>
-    </Box>
+                {API_PROVIDERS.map((provider, index) => {
+                  const existingKey = getKeyForProvider(provider.id);
+                  const keyId = existingKey?.id || "";
+
+                  return (
+                    <Box key={provider.id}>
+                      <VStack align="stretch" gap={3}>
+                        <HStack justify="space-between">
+                          <VStack align="start" gap={1}>
+                            <HStack gap={2}>
+                              <Text fontWeight="600" fontSize="md">
+                                {provider.name}
+                              </Text>
+                              {existingKey && (
+                                <Badge colorScheme="green" size="sm">
+                                  Skonfigurowany
+                                </Badge>
+                              )}
+                            </HStack>
+                            <Text fontSize="sm" color="gray.600">
+                              {provider.description}
+                            </Text>
+                          </VStack>
+                        </HStack>
+
+                        {existingKey ? (
+                          <HStack gap={2}>
+                            <Input
+                              value={
+                                showKeys[keyId]
+                                  ? existingKey.key
+                                  : maskApiKey(existingKey.key)
+                              }
+                              readOnly
+                              bg="gray.50"
+                              fontSize="sm"
+                              fontFamily="mono"
+                            />
+                            <IconButton
+                              aria-label="Pokaż/ukryj klucz"
+                              size="sm"
+                              onClick={() => toggleKeyVisibility(keyId)}
+                            >
+                              <Icon
+                                as={
+                                  showKeys[keyId]
+                                    ? HiOutlineEyeSlash
+                                    : HiOutlineEye
+                                }
+                              />
+                            </IconButton>
+                            <IconButton
+                              aria-label="Usuń klucz"
+                              size="sm"
+                              colorScheme="red"
+                              variant="outline"
+                              onClick={() => handleDeleteKey(keyId)}
+                            >
+                              <Icon as={HiOutlineTrash} />
+                            </IconButton>
+                          </HStack>
+                        ) : (
+                          <Box>
+                            <Text fontSize="sm" fontWeight="600" mb={2}>
+                              Klucz API
+                            </Text>
+                            <HStack gap={2}>
+                              <Input
+                                value={newKeys[provider.id] || ""}
+                                onChange={(e) =>
+                                  setNewKeys({
+                                    ...newKeys,
+                                    [provider.id]: e.target.value,
+                                  })
+                                }
+                                placeholder={provider.placeholder}
+                                type="text"
+                                fontSize="sm"
+                                fontFamily="mono"
+                                color="gray.800"
+                              />
+                              <Button
+                                onClick={() => handleSaveKey(provider.id)}
+                                size="sm"
+                                colorScheme="blue"
+                                disabled={!newKeys[provider.id]?.trim()}
+                              >
+                                Zapisz
+                              </Button>
+                            </HStack>
+                            <Text fontSize="xs" color="gray.500" mt={1}>
+                              {provider.helpText}
+                            </Text>
+                          </Box>
+                        )}
+                      </VStack>
+                      {index < API_PROVIDERS.length - 1 && (
+                        <Box w="full" h="1px" bg="gray.200" mt={4} />
+                      )}
+                    </Box>
+                  );
+                })}
+              </VStack>
+            </Dialog.Body>
+
+            <Dialog.Footer>
+              <Button onClick={onClose}>Zamknij</Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Portal>
+    </Dialog.Root>
   );
 };
 
