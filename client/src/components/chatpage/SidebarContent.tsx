@@ -75,6 +75,7 @@ interface SidebarContentProps {
   setActiveChatId: (chatId: string | null) => void;
   onChatSelect?: () => void; // Callback wywoływany po wyborze czatu (dla mobile drawer)
   onNewChat?: () => void; // Callback wywoływany po kliknięciu "Nowa rozmowa"
+  onCloseSidebar?: () => void; // Callback tylko dla zamykania sidebara na mobile
 }
 
 const SidebarContent: React.FC<SidebarContentProps> = ({
@@ -82,6 +83,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
   setActiveChatId,
   onChatSelect,
   onNewChat,
+  onCloseSidebar,
 }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -99,7 +101,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
   const handleNewChat = () => {
     setActiveChatId(null);
     onNewChat?.(); // Wywołaj callback
-    onChatSelect?.(); // Zamknij drawer na mobile
+    onCloseSidebar?.(); // Zamknij drawer na mobile (bez wpływu na isNewChatMode)
   };
 
   // Funkcja do formatowania czasu

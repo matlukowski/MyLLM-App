@@ -55,6 +55,13 @@ const ChatPage: React.FC = () => {
     setIsNewChatMode(false);
   };
 
+  // Callback tylko dla zamykania sidebara na mobile (bez wpływu na isNewChatMode)
+  const handleCloseSidebar = () => {
+    if (isMobile) {
+      setIsSidebarOpen(false);
+    }
+  };
+
   // Callback dla tworzenia nowego czatu
   const handleNewChat = () => {
     setActiveChatId(null);
@@ -118,6 +125,7 @@ const ChatPage: React.FC = () => {
           setActiveChatId={setActiveChatId}
           onChatSelect={handleChatSelect}
           onNewChat={handleNewChat}
+          onCloseSidebar={handleCloseSidebar}
         />
       </Box>
 
