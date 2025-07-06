@@ -604,43 +604,46 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           )}
 
           {/* Wskaźnik pisania */}
-          {isSending && (
-            <HStack align="start" gap={3} w="full">
-              <Flex
-                align="center"
-                justify="center"
-                w={8}
-                h={8}
-                bg="gray.500"
-                color="white"
-                borderRadius="full"
-                fontSize="sm"
-                flexShrink={0}
-              >
-                {getModelAvatar(selectedModel)}
-              </Flex>
-              <VStack align="start" gap={2} flex={1}>
-                <Text fontWeight="600" color="gray.800" fontSize="sm">
-                  {currentModel?.name || "AI"}
-                </Text>
-                <Box
-                  bg="gray.50"
-                  px={4}
-                  py={3}
-                  borderRadius="12px"
-                  border="1px solid"
-                  borderColor="gray.200"
+          {isSending &&
+            !messages.some(
+              (msg) => msg.role === "assistant" && msg.isTyping
+            ) && (
+              <HStack align="start" gap={3} w="full">
+                <Flex
+                  align="center"
+                  justify="center"
+                  w={8}
+                  h={8}
+                  bg="gray.500"
+                  color="white"
+                  borderRadius="full"
+                  fontSize="sm"
+                  flexShrink={0}
                 >
-                  <HStack gap={2}>
-                    <Spinner size="xs" color="gray.400" />
-                    <Text fontSize="sm" color="gray.600">
-                      Pisze...
-                    </Text>
-                  </HStack>
-                </Box>
-              </VStack>
-            </HStack>
-          )}
+                  {getModelAvatar(selectedModel)}
+                </Flex>
+                <VStack align="start" gap={2} flex={1}>
+                  <Text fontWeight="600" color="gray.800" fontSize="sm">
+                    {currentModel?.name || "AI"}
+                  </Text>
+                  <Box
+                    bg="gray.50"
+                    px={4}
+                    py={3}
+                    borderRadius="12px"
+                    border="1px solid"
+                    borderColor="gray.200"
+                  >
+                    <HStack gap={2}>
+                      <Spinner size="xs" color="gray.400" />
+                      <Text fontSize="sm" color="gray.600">
+                        Pisze...
+                      </Text>
+                    </HStack>
+                  </Box>
+                </VStack>
+              </HStack>
+            )}
           <div ref={messagesEndRef} />
         </VStack>
       )}
