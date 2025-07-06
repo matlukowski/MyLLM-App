@@ -15,6 +15,18 @@ import {
   Badge,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
+
+// Animacja fade in dla wiadomości AI
+const fadeIn = keyframes`
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+`;
 import { useAuth } from "../../contexts/AuthContext";
 import {
   HiOutlinePaperAirplane,
@@ -30,74 +42,6 @@ import {
   type LLMModel,
 } from "../../types/types";
 import MarkdownRenderer from "../ui/MarkdownRenderer";
-import StreamingMarkdown from "../ui/StreamingMarkdown";
-
-// Animacja migającego kursora
-const blinkAnimation = keyframes`
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-`;
-
-// Komponent z efektem pisania maszynowego
-interface TypewriterTextProps {
-  text: string;
-  speed?: number;
-  onComplete?: () => void;
-}
-
-const TypewriterText: React.FC<TypewriterTextProps> = ({
-  text,
-  speed = 30,
-  onComplete,
-}) => {
-  const [displayedText, setDisplayedText] = useState("");
-  const [isComplete, setIsComplete] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  useEffect(() => {
-    if (currentIndex < text.length) {
-      const timer = setTimeout(() => {
-        setDisplayedText((prev) => prev + text[currentIndex]);
-        setCurrentIndex((prev) => prev + 1);
-      }, speed);
-
-      return () => clearTimeout(timer);
-    } else if (currentIndex === text.length && !isComplete) {
-      setIsComplete(true);
-      onComplete?.();
-    }
-  }, [currentIndex, text, speed, isComplete, onComplete]);
-
-  // Reset gdy zmieni się tekst
-  useEffect(() => {
-    setDisplayedText("");
-    setCurrentIndex(0);
-    setIsComplete(false);
-  }, [text]);
-
-  return (
-    <Text
-      fontSize="sm"
-      whiteSpace="pre-wrap"
-      lineHeight="1.6"
-      wordBreak="break-word"
-      display="inline"
-      color="gray.800"
-    >
-      {displayedText}
-      {!isComplete && (
-        <Text
-          as="span"
-          color="gray.400"
-          animation={`${blinkAnimation} 1s infinite`}
-          fontWeight="normal"
-        >
-          |
-        </Text>
-      )}
-    </Text>
-  );
-};
 
 interface ChatMessage {
   id: string;
@@ -105,7 +49,7 @@ interface ChatMessage {
   timestamp: Date;
   role: "user" | "assistant";
   modelId: string;
-  isTyping?: boolean;
+  isAnimating?: boolean;
 }
 
 interface AIChatWindowProps {
@@ -129,8 +73,10 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     getPopularLLMModels()[0]?.id || "gpt-4.1"
   );
   const [chatTitle, setChatTitle] = useState<string>("");
+  const [isJustCreated, setIsJustCreated] = useState(false); // Flaga dla świeżo utworzonych czatów
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Pobierz konfigurację wybranego modelu
   const currentModel = getLLMModel(selectedModel);
@@ -142,26 +88,61 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
 
   // Przewiń do dołu po dodaniu nowej wiadomości
   useEffect(() => {
-    scrollToBottom();
+    const container = chatContainerRef.current;
+    if (container) {
+      // Przewijaj tylko jeśli użytkownik jest blisko dołu
+      const isScrolledToBottom =
+        container.scrollHeight - container.clientHeight <=
+        container.scrollTop + 150;
+      if (isScrolledToBottom) {
+        scrollToBottom();
+      }
+    } else {
+      // Fallback dla pierwszego ładowania
+      scrollToBottom();
+    }
   }, [messages]);
 
   // Załaduj czat jeśli nie jest nowy
   useEffect(() => {
+    console.log(
+      "📋 useEffect loadChatHistory - chatId:",
+      chatId,
+      "isNewChat:",
+      isNewChat,
+      "isJustCreated:",
+      isJustCreated
+    );
+
     if (isNewChat) {
+      console.log("📋 Czyszczę wiadomości - nowy czat");
       setMessages([]);
       setChatTitle("");
       setLoading(false);
+      setIsJustCreated(false);
       return;
     }
 
     if (!chatId) {
+      console.log("📋 Czyszczę wiadomości - brak chatId");
       setMessages([]);
+      setLoading(false);
+      setIsJustCreated(false);
+      return;
+    }
+
+    // Nie ładuj historii dla świeżo utworzonych czatów
+    if (isJustCreated) {
+      console.log(
+        "📋 Pomijam ładowanie historii - czat został właśnie utworzony"
+      );
       setLoading(false);
       return;
     }
 
     // Załaduj historię czatu z backendu
     const loadChatHistory = async () => {
+      console.log("📋 Ładuję historię czatu:", chatId);
       setLoading(true);
       try {
         const response = await fetch(
@@ -181,6 +162,11 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
             })
           );
 
+          console.log(
+            "📋 Załadowano wiadomości z serwera:",
+            formattedMessages.length,
+            formattedMessages
+          );
           setMessages(formattedMessages);
 
           // Pobierz tytuł czatu
@@ -203,33 +189,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     };
 
     loadChatHistory();
-  }, [chatId, isNewChat, user?.id]);
-
-  // Funkcja do symulacji streamingu tekstu
-  const simulateStreaming = async (messageId: string, fullText: string) => {
-    const words = fullText.split(" ");
-    let currentContent = "";
-
-    for (let i = 0; i < words.length; i++) {
-      currentContent += (i > 0 ? " " : "") + words[i];
-
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId ? { ...msg, content: currentContent } : msg
-        )
-      );
-
-      // Dodaj małe opóźnienie między słowami
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-
-    // Zakończ streaming
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId ? { ...msg, isTyping: false } : msg
-      )
-    );
-  };
+  }, [chatId, isNewChat, isJustCreated, user?.id]);
 
   // Wyślij wiadomość do AI
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -251,6 +211,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         role: "user",
         modelId: selectedModel,
       };
+      console.log("💬 Dodaję wiadomość użytkownika:", userMessage.id);
       setMessages((prev) => [...prev, userMessage]);
 
       // 2. Przygotuj historię czatu (ostatnie 10 wiadomości)
@@ -291,6 +252,8 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
 
       // 4. Jeśli to nowy czat, ustaw chatId
       if (isNewChat && data.chatId) {
+        console.log("💬 Tworzę nowy czat:", data.chatId);
+        setIsJustCreated(true); // Oznacz że czat został właśnie utworzony
         onChatCreated?.(data.chatId);
       }
 
@@ -299,27 +262,38 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         setChatTitle(data.chatTitle);
       }
 
-      // 6. Dodaj pustą wiadomość AI i rozpocznij streaming
-      const aiMessageId = `ai-${Date.now()}`;
-      const aiMessage: ChatMessage = {
-        id: aiMessageId,
-        content: "",
-        timestamp: new Date(),
-        role: "assistant",
-        modelId: selectedModel,
-        isTyping: true,
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-
-      // 7. Zakończ stan wysyłania zaraz po otrzymaniu odpowiedzi
+      // 6. Zakończ stan wysyłania zaraz po otrzymaniu odpowiedzi
       setIsSending(false);
 
-      // 8. Dodaj małe opóźnienie aby UI zdążyło się przerenderować
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // 7. Dodaj małe opóźnienie przed dodaniem wiadomości AI dla lepszego efektu
+      setTimeout(() => {
+        const aiMessageId = `ai-${Date.now()}`;
+        console.log("🎬 Dodaję wiadomość AI z animacją:", aiMessageId);
 
-      // 9. Symuluj streaming poprzez stopniowe dodawanie tekstu
-      await simulateStreaming(aiMessageId, data.response);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: aiMessageId,
+            content: data.response,
+            timestamp: new Date(),
+            role: "assistant",
+            modelId: selectedModel,
+            isAnimating: true,
+          },
+        ]);
+
+        // 8. Usuń flagę animacji po zakończeniu animacji
+        setTimeout(() => {
+          console.log("🎬 Kończę animację dla:", aiMessageId);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === aiMessageId ? { ...msg, isAnimating: false } : msg
+            )
+          );
+          // Zresetuj flagę świeżo utworzonego czatu po zakończeniu animacji
+          setIsJustCreated(false);
+        }, 1000); // Zwiększone z 800ms na 1000ms
+      }, 200); // Małe opóźnienie 200ms
     } catch (error: any) {
       console.error("Błąd podczas wysyłania wiadomości do AI:", error);
       setError(error.message || "Wystąpił nieoczekiwany błąd");
@@ -440,6 +414,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         </Flex>
       ) : (
         <VStack
+          ref={chatContainerRef}
           flex="1"
           overflowY="auto"
           px={4}
@@ -488,6 +463,16 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
             messages.map((message) => {
               const isUserMessage = message.role === "user";
               const messageModel = getLLMModel(message.modelId);
+
+              // Debug animacji
+              if (!isUserMessage && message.isAnimating) {
+                console.log(
+                  "🎬 Renderuję wiadomość z animacją:",
+                  message.id,
+                  "isAnimating:",
+                  message.isAnimating
+                );
+              }
 
               return (
                 <VStack key={message.id} align="stretch" gap={3} w="full">
@@ -542,6 +527,27 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                         position="relative"
                         w="full"
                         role="group"
+                        animation={
+                          !isUserMessage && message.isAnimating
+                            ? `${fadeIn} 0.8s ease-out`
+                            : undefined
+                        }
+                        onAnimationStart={() => {
+                          if (!isUserMessage && message.isAnimating) {
+                            console.log(
+                              "🎬 Animacja rozpoczęta dla:",
+                              message.id
+                            );
+                          }
+                        }}
+                        onAnimationEnd={() => {
+                          if (!isUserMessage && message.isAnimating) {
+                            console.log(
+                              "🎬 Animacja zakończona dla:",
+                              message.id
+                            );
+                          }
+                        }}
                       >
                         {isUserMessage ? (
                           <Text
@@ -553,11 +559,6 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                           >
                             {message.content}
                           </Text>
-                        ) : message.isTyping ? (
-                          <StreamingMarkdown
-                            content={message.content}
-                            isStreaming={message.isTyping}
-                          />
                         ) : (
                           <MarkdownRenderer
                             content={message.content}
@@ -610,46 +611,43 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           )}
 
           {/* Wskaźnik pisania */}
-          {isSending &&
-            !messages.some(
-              (msg) => msg.role === "assistant" && msg.isTyping
-            ) && (
-              <HStack align="start" gap={3} w="full">
-                <Flex
-                  align="center"
-                  justify="center"
-                  w={8}
-                  h={8}
-                  bg="gray.500"
-                  color="white"
-                  borderRadius="full"
-                  fontSize="sm"
-                  flexShrink={0}
+          {isSending && (
+            <HStack align="start" gap={3} w="full">
+              <Flex
+                align="center"
+                justify="center"
+                w={8}
+                h={8}
+                bg="gray.500"
+                color="white"
+                borderRadius="full"
+                fontSize="sm"
+                flexShrink={0}
+              >
+                {getModelAvatar(selectedModel)}
+              </Flex>
+              <VStack align="start" gap={2} flex={1}>
+                <Text fontWeight="600" color="gray.800" fontSize="sm">
+                  {currentModel?.name || "AI"}
+                </Text>
+                <Box
+                  bg="gray.50"
+                  px={4}
+                  py={3}
+                  borderRadius="12px"
+                  border="1px solid"
+                  borderColor="gray.200"
                 >
-                  {getModelAvatar(selectedModel)}
-                </Flex>
-                <VStack align="start" gap={2} flex={1}>
-                  <Text fontWeight="600" color="gray.800" fontSize="sm">
-                    {currentModel?.name || "AI"}
-                  </Text>
-                  <Box
-                    bg="gray.50"
-                    px={4}
-                    py={3}
-                    borderRadius="12px"
-                    border="1px solid"
-                    borderColor="gray.200"
-                  >
-                    <HStack gap={2}>
-                      <Spinner size="xs" color="gray.400" />
-                      <Text fontSize="sm" color="gray.600">
-                        Pisze...
-                      </Text>
-                    </HStack>
-                  </Box>
-                </VStack>
-              </HStack>
-            )}
+                  <HStack gap={2}>
+                    <Spinner size="xs" color="gray.400" />
+                    <Text fontSize="sm" color="gray.600">
+                      Pisze...
+                    </Text>
+                  </HStack>
+                </Box>
+              </VStack>
+            </HStack>
+          )}
           <div ref={messagesEndRef} />
         </VStack>
       )}

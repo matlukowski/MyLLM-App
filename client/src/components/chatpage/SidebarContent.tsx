@@ -17,13 +17,16 @@ import {
   HiOutlineChatBubbleLeftRight,
   HiOutlineEllipsisVertical,
   HiOutlineCog6Tooth,
+  HiOutlineTrash,
 } from "react-icons/hi2";
 import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Chat, getLLMModel } from "../../types/types";
 import ApiKeysModal from "../ui/ApiKeysModal";
+import DeleteChatModal from "../ui/DeleteChatModal";
 import { useEffect } from "react";
-import { getChats } from "../../../../server/src/api/chatApi";
+import { getChats, deleteChatById } from "../../../../server/src/api/chatApi";
+import { toast } from "react-toastify";
 
 interface SidebarContentProps {
   activeChatId: string | null;
@@ -43,6 +46,9 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [isApiKeysModalOpen, setIsApiKeysModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
+  const [isDeletingChat, setIsDeletingChat] = useState(false);
 
   // Lista czatów z bazy danych
   const [chats, setChats] = useState<Chat[]>([]);
@@ -106,6 +112,45 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
       setChats(chatsWithDates);
     } catch (error) {
       console.error("Błąd podczas odświeżania czatów:", error);
+    }
+  };
+
+  // Funkcja do otwierania modalu usuwania czatu
+  const handleDeleteChatClick = (chat: Chat, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChatToDelete(chat);
+    setIsDeleteModalOpen(true);
+  };
+
+  // Funkcja do zamykania modalu usuwania
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setChatToDelete(null);
+  };
+
+  // Funkcja do potwierdzenia usunięcia czatu
+  const handleConfirmDelete = async () => {
+    if (!chatToDelete || !user?.id) return;
+
+    setIsDeletingChat(true);
+    try {
+      await deleteChatById(chatToDelete.id, user.id);
+
+      // Usuń czat z lokalnej listy
+      setChats(chats.filter((chat) => chat.id !== chatToDelete.id));
+
+      // Jeśli usuwany czat jest aktywny, przejdź do nowego czatu
+      if (activeChatId === chatToDelete.id) {
+        setActiveChatId(null);
+      }
+
+      toast.success("Rozmowa została usunięta");
+      handleCloseDeleteModal();
+    } catch (error) {
+      console.error("Błąd podczas usuwania czatu:", error);
+      toast.error("Nie udało się usunąć rozmowy");
+    } finally {
+      setIsDeletingChat(false);
     }
   };
 
@@ -206,126 +251,129 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
               const isActive = chat.id === activeChatId;
 
               return (
-                <Button
-                  key={chat.id}
-                  onClick={() => handleChatSelect(chat.id)}
-                  w="full"
-                  h="auto"
-                  p={3}
-                  bg={isActive ? "gray.800" : "transparent"}
-                  color="white"
-                  border="none"
-                  borderRadius="8px"
-                  justifyContent="flex-start"
-                  _hover={{
-                    bg: isActive ? "gray.800" : "gray.800",
-                  }}
-                  _active={{
-                    transform: "scale(0.98)",
-                  }}
-                  transition="all 0.2s ease"
-                  fontWeight="normal"
-                  textAlign="left"
-                  position="relative"
-                  role="group"
-                >
-                  <HStack gap={3} w="full">
-                    <Flex
-                      align="center"
-                      justify="center"
-                      w={8}
-                      h={8}
-                      bg="gray.700"
-                      borderRadius="6px"
-                      fontSize="sm"
-                      flexShrink={0}
-                    >
-                      <Icon
-                        as={HiOutlineChatBubbleLeftRight}
-                        boxSize={4}
-                        color="gray.300"
-                      />
-                    </Flex>
+                <Box key={chat.id} position="relative" role="group" w="full">
+                  <Button
+                    onClick={() => handleChatSelect(chat.id)}
+                    w="full"
+                    h="auto"
+                    p={3}
+                    bg={isActive ? "gray.800" : "transparent"}
+                    color="white"
+                    border="none"
+                    borderRadius="8px"
+                    justifyContent="flex-start"
+                    _hover={{
+                      bg: isActive ? "gray.800" : "gray.800",
+                    }}
+                    _active={{
+                      transform: "scale(0.98)",
+                    }}
+                    transition="all 0.2s ease"
+                    fontWeight="normal"
+                    textAlign="left"
+                  >
+                    <HStack gap={3} w="full">
+                      <Flex
+                        align="center"
+                        justify="center"
+                        w={8}
+                        h={8}
+                        bg="gray.700"
+                        borderRadius="6px"
+                        fontSize="sm"
+                        flexShrink={0}
+                      >
+                        <Icon
+                          as={HiOutlineChatBubbleLeftRight}
+                          boxSize={4}
+                          color="gray.300"
+                        />
+                      </Flex>
 
-                    <VStack align="start" gap={1} flex={1} minW={0}>
-                      <HStack w="full" justify="space-between">
+                      <VStack align="start" gap={1} flex={1} minW={0}>
+                        <HStack w="full" justify="space-between">
+                          <Text
+                            fontWeight="500"
+                            color="white"
+                            fontSize="sm"
+                            overflow="hidden"
+                            textOverflow="ellipsis"
+                            whiteSpace="nowrap"
+                            flex={1}
+                            pr={8} // Dodaj padding-right aby zrobić miejsce na przycisk usuwania
+                          >
+                            {chat.title}
+                          </Text>
+                          {isActive && (
+                            <Box
+                              w={2}
+                              h={2}
+                              bg="green.400"
+                              borderRadius="full"
+                              flexShrink={0}
+                              mr={8} // Przesuń zieloną kropkę w lewo aby nie zasłaniała przycisku
+                            />
+                          )}
+                        </HStack>
+
                         <Text
-                          fontWeight="500"
-                          color="white"
-                          fontSize="sm"
+                          fontSize="xs"
+                          color="gray.400"
                           overflow="hidden"
                           textOverflow="ellipsis"
                           whiteSpace="nowrap"
-                          flex={1}
+                          w="full"
                         >
-                          {chat.title}
+                          {chat.lastMessage}
                         </Text>
-                        {isActive && (
-                          <Box
-                            w={2}
-                            h={2}
-                            bg="green.400"
-                            borderRadius="full"
-                            flexShrink={0}
-                          />
-                        )}
-                      </HStack>
 
-                      <Text
-                        fontSize="xs"
-                        color="gray.400"
-                        overflow="hidden"
-                        textOverflow="ellipsis"
-                        whiteSpace="nowrap"
-                        w="full"
-                      >
-                        {chat.lastMessage}
-                      </Text>
+                        <HStack justify="space-between" w="full">
+                          <Badge
+                            size="xs"
+                            colorScheme="blue"
+                            variant="subtle"
+                            fontSize="10px"
+                            px={2}
+                            py={0.5}
+                          >
+                            {model?.name || "Nieznany"}
+                          </Badge>
+                          <Text fontSize="10px" color="gray.500">
+                            {formatTime(chat.lastMessageTime)}
+                          </Text>
+                        </HStack>
+                      </VStack>
+                    </HStack>
+                  </Button>
 
-                      <HStack justify="space-between" w="full">
-                        <Badge
-                          size="xs"
-                          colorScheme="blue"
-                          variant="subtle"
-                          fontSize="10px"
-                          px={2}
-                          py={0.5}
-                        >
-                          {model?.name || "Nieznany"}
-                        </Badge>
-                        <Text fontSize="10px" color="gray.500">
-                          {formatTime(chat.lastMessageTime)}
-                        </Text>
-                      </HStack>
-                    </VStack>
-                  </HStack>
-
-                  {/* Menu opcji (widoczne po hover) */}
+                  {/* Przycisk usuwania (widoczny po hover) */}
                   <Button
                     position="absolute"
-                    top={2}
-                    right={2}
+                    top={0}
+                    right={0}
                     size="xs"
-                    variant="ghost"
-                    color="gray.400"
+                    variant="solid"
+                    bg="gray.700"
+                    color="gray.300"
                     minW="auto"
                     h="auto"
-                    p={1}
-                    opacity={0}
+                    p={1.5}
                     _groupHover={{ opacity: 1 }}
                     _hover={{
-                      color: "gray.200",
-                      bg: "gray.700",
+                      color: "red.400",
+                      bg: "gray.600",
+                      transform: "scale(1.05)",
                     }}
-                    transition="opacity 0.2s"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // TODO: Implementacja menu opcji (usuń, zmień nazwę, etc.)
-                    }}
+                    transition="all 0.2s ease"
+                    onClick={(e) => handleDeleteChatClick(chat, e)}
+                    title="Usuń rozmowę"
+                    borderRadius="4px"
+                    border="1px solid"
+                    borderColor="gray.600"
                   >
-                    <Icon as={HiOutlineEllipsisVertical} boxSize={3} />
+                    <Icon as={HiOutlineTrash} boxSize={4} />
                   </Button>
-                </Button>
+                </Box>
               );
             })
           )}
@@ -398,6 +446,15 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
       <ApiKeysModal
         isOpen={isApiKeysModalOpen}
         onClose={() => setIsApiKeysModalOpen(false)}
+      />
+
+      {/* Modal usuwania czatu */}
+      <DeleteChatModal
+        isOpen={isDeleteModalOpen}
+        onClose={handleCloseDeleteModal}
+        onConfirm={handleConfirmDelete}
+        chatTitle={chatToDelete?.title || ""}
+        isDeleting={isDeletingChat}
       />
     </>
   );

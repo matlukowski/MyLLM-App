@@ -354,6 +354,55 @@ app.post("/api/ai/chats", async (req: Request, res: Response) => {
   }
 });
 
+// Endpoint do usuwania czatu
+app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
+  const { chatId } = req.params;
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: "userId jest wymagany" });
+  }
+
+  try {
+    // Sprawdź czy czat istnieje i czy użytkownik ma do niego dostęp
+    const chat = await prisma.chat.findFirst({
+      where: {
+        id: chatId,
+        participants: {
+          some: { userId: userId },
+        },
+      },
+    });
+
+    if (!chat) {
+      return res
+        .status(404)
+        .json({ error: "Czat nie został znaleziony lub brak dostępu" });
+    }
+
+    // Usuń wszystkie wiadomości z czatu
+    await prisma.message.deleteMany({
+      where: { chatId },
+    });
+
+    // Usuń wszystkich uczestników czatu
+    await prisma.chatParticipant.deleteMany({
+      where: { chatId },
+    });
+
+    // Usuń czat
+    await prisma.chat.delete({
+      where: { id: chatId },
+    });
+
+    console.log("✅ Usunięto czat:", chatId);
+    res.json({ message: "Czat został usunięty" });
+  } catch (error) {
+    console.error("❌ Błąd podczas usuwania czatu:", error);
+    res.status(500).json({ error: "Nie udało się usunąć czatu" });
+  }
+});
+
 // Endpoint do czatu z AI (z pamięcią długoterminową RAG)
 app.post("/api/ai/chat", async (req: Request, res: Response) => {
   const { userId, modelId, userMessage, chatHistory, chatId } = req.body;
@@ -412,7 +461,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
         "Jesteś pomocnym asystentem AI. Odpowiadaj w sposób przystępny i pomocny.",
     };
 
-    console.log("🤖 Wysyłanie żądania do serwisu RAG:", {
+    console.log("🤖 Generowanie odpowiedzi AI:", {
       userId,
       modelId,
       userMessage: userMessage.substring(0, 50) + "...",
@@ -420,20 +469,45 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       chatId: currentChatId,
     });
 
-    // Wyślij żądanie do serwisu RAG
-    const ragResponse = await axios.post(
-      `${RAG_SERVICE_URL}/chat`,
-      ragRequest,
-      {
-        timeout: 30000, // 30 sekund timeout
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    let aiResponse = "";
+    let memoriesUsed = 0;
 
-    const aiResponse = ragResponse.data.response;
-    const memoriesUsed = ragResponse.data.memories_used || 0;
+    // Sprawdź czy serwis RAG jest dostępny
+    try {
+      const ragResponse = await axios.post(
+        `${RAG_SERVICE_URL}/chat`,
+        ragRequest,
+        {
+          timeout: 5000, // 5 sekund timeout
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      aiResponse = ragResponse.data.response;
+      memoriesUsed = ragResponse.data.memories_used || 0;
+      console.log("✅ Używam serwisu RAG");
+    } catch (ragError: any) {
+      console.log("⚠️ Serwis RAG niedostępny, używam mockowej odpowiedzi");
+
+      // Prosta mockowa odpowiedź AI
+      const mockResponses = [
+        "Cześć! Jak mogę Ci pomóc?",
+        "To ciekawe pytanie! Pozwól mi na nie odpowiedzieć...",
+        "Dzięki za wiadomość! Oto co myślę na ten temat:",
+        "Świetnie! Chętnie pomogę Ci z tym problemem.",
+        "To jest bardzo interesujące zagadnienie. Według mnie...",
+        "Rozumiem Twoje pytanie. Postaram się je szczegółowo wyjaśnić.",
+        "Witaj! Cieszę się, że możemy porozmawiać na ten temat.",
+        "Bardzo dobra obserwacja! Rzeczywiście...",
+      ];
+
+      const randomResponse =
+        mockResponses[Math.floor(Math.random() * mockResponses.length)];
+      aiResponse = `${randomResponse}\n\n*Uwaga: Obecnie używam prostej mockowej odpowiedzi. Aby uzyskać pełną funkcjonalność AI, uruchom serwis RAG zgodnie z instrukcjami w folderze ai-rag-service.*`;
+      memoriesUsed = 0;
+    }
 
     // Zapisz odpowiedź AI
     await prisma.message.create({
@@ -450,7 +524,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       data: { updatedAt: new Date() },
     });
 
-    console.log("✅ Otrzymano odpowiedź z serwisu RAG:", {
+    console.log("✅ Odpowiedź AI wygenerowana:", {
       responseLength: aiResponse.length,
       memoriesUsed,
       chatId: currentChatId,
@@ -467,19 +541,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       chatTitle: chatTitle || undefined,
     });
   } catch (error: any) {
-    console.error("❌ Błąd komunikacji z serwisem RAG:", error.message);
-
-    if (error.code === "ECONNREFUSED") {
-      return res.status(503).json({
-        error: "Serwis AI jest obecnie niedostępny. Spróbuj ponownie później.",
-      });
-    }
-
-    if (error.response?.data?.error) {
-      return res.status(500).json({
-        error: `Błąd serwisu AI: ${error.response.data.error}`,
-      });
-    }
+    console.error("❌ Błąd przetwarzania żądania AI:", error.message);
 
     res.status(500).json({
       error: "Wystąpił błąd podczas przetwarzania żądania AI",

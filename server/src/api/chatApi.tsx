@@ -24,3 +24,13 @@ export const createAIChat = async (
   });
   return response.data;
 };
+
+export const deleteChatById = async (chatId: string, userId: string) => {
+  const response = await axios.delete(
+    `http://localhost:3001/api/chats/${chatId}`,
+    {
+      data: { userId },
+    }
+  );
+  return response.data;
+};
