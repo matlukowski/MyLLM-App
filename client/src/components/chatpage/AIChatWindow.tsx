@@ -392,6 +392,13 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           maxW="4xl"
           mx="auto"
           w="full"
+          css={{
+            "&::-webkit-scrollbar": {
+              display: "none",
+            },
+            msOverflowStyle: "none",
+            scrollbarWidth: "none",
+          }}
         >
           {messages.length === 0 ? (
             <Flex justify="center" align="center" h="full" py={20}>
