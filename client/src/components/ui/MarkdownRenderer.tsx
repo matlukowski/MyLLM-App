@@ -2,7 +2,7 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { Box, Code, Text, Heading } from "@chakra-ui/react";
+import { Box, Code, Text, Heading, Link, chakra } from "@chakra-ui/react";
 import "highlight.js/styles/github.css";
 
 interface MarkdownRendererProps {
@@ -19,117 +19,65 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   color = "gray.800",
 }) => {
   return (
-    <Box
-      fontSize={fontSize}
-      lineHeight={lineHeight}
-      color={color}
-      css={{
-        // Stylowanie dla różnych elementów Markdown
-        "& p": {
-          marginBottom: "0.75rem",
-          "&:last-child": {
-            marginBottom: 0,
-          },
-        },
-        "& h1, & h2, & h3, & h4, & h5, & h6": {
-          fontWeight: "600",
-          marginTop: "1rem",
-          marginBottom: "0.5rem",
-          "&:first-child": {
-            marginTop: 0,
-          },
-        },
-        "& h1": {
-          fontSize: "1.25rem",
-        },
-        "& h2": {
-          fontSize: "1.125rem",
-        },
-        "& h3": {
-          fontSize: "1rem",
-        },
-        "& ul, & ol": {
-          paddingLeft: "1.5rem",
-          marginBottom: "0.75rem",
-        },
-        "& li": {
-          marginBottom: "0.25rem",
-        },
-        "& blockquote": {
-          borderLeft: "4px solid #e2e8f0",
-          paddingLeft: "1rem",
-          marginLeft: "0",
-          marginRight: "0",
-          marginBottom: "0.75rem",
-          fontStyle: "italic",
-          color: "#718096",
-        },
-        "& code": {
-          backgroundColor: "#f7fafc",
-          padding: "0.125rem 0.25rem",
-          borderRadius: "0.25rem",
-          fontSize: "0.875em",
-          fontFamily: "monospace",
-          color: "#e53e3e",
-        },
-        "& pre": {
-          backgroundColor: "#f7fafc",
-          padding: "1rem",
-          borderRadius: "0.5rem",
-          overflow: "auto",
-          marginBottom: "0.75rem",
-          border: "1px solid #e2e8f0",
-        },
-        "& pre code": {
-          backgroundColor: "transparent",
-          padding: 0,
-          color: "inherit",
-          fontSize: "0.875rem",
-        },
-        "& table": {
-          width: "100%",
-          borderCollapse: "collapse",
-          marginBottom: "0.75rem",
-        },
-        "& th, & td": {
-          border: "1px solid #e2e8f0",
-          padding: "0.5rem",
-          textAlign: "left",
-        },
-        "& th": {
-          backgroundColor: "#f7fafc",
-          fontWeight: "600",
-        },
-        "& a": {
-          color: "#3182ce",
-          textDecoration: "underline",
-          "&:hover": {
-            color: "#2c5282",
-          },
-        },
-        "& strong": {
-          fontWeight: "600",
-        },
-        "& em": {
-          fontStyle: "italic",
-        },
-        "& hr": {
-          border: "none",
-          borderTop: "1px solid #e2e8f0",
-          margin: "1rem 0",
-        },
-      }}
-    >
+    <Box fontSize={fontSize} lineHeight={lineHeight} color={color}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
+        remarkRehypeOptions={{ allowDangerousHtml: true }}
         components={{
-          // Niestandardowe komponenty dla lepszego stylowania
+          // Paragraphs
           p: ({ children }) => (
-            <Text as="p" whiteSpace="pre-wrap" wordBreak="break-word">
+            <Text mb={3} whiteSpace="pre-wrap" wordBreak="break-word">
               {children}
             </Text>
           ),
+
+          // Headings
+          h1: ({ children }) => (
+            <Heading as="h1" size="xl" mt={4} mb={2} fontWeight="600">
+              {children}
+            </Heading>
+          ),
+          h2: ({ children }) => (
+            <Heading as="h2" size="lg" mt={4} mb={2} fontWeight="600">
+              {children}
+            </Heading>
+          ),
+          h3: ({ children }) => (
+            <Heading as="h3" size="md" mt={3} mb={2} fontWeight="600">
+              {children}
+            </Heading>
+          ),
+          h4: ({ children }) => (
+            <Heading as="h4" size="sm" mt={3} mb={2} fontWeight="600">
+              {children}
+            </Heading>
+          ),
+          h5: ({ children }) => (
+            <Heading as="h5" size="xs" mt={3} mb={2} fontWeight="600">
+              {children}
+            </Heading>
+          ),
+          h6: ({ children }) => (
+            <Heading as="h6" size="xs" mt={3} mb={2} fontWeight="600">
+              {children}
+            </Heading>
+          ),
+
+          // Lists
+          ul: ({ children }) => (
+            <chakra.ul pl={6} mb={3} css={{ listStyleType: "disc" }}>
+              {children}
+            </chakra.ul>
+          ),
+          ol: ({ children }) => (
+            <chakra.ol pl={6} mb={3} css={{ listStyleType: "decimal" }}>
+              {children}
+            </chakra.ol>
+          ),
+          li: ({ children }) => <chakra.li mb={1}>{children}</chakra.li>,
+
+          // Code blocks and inline code
           code: ({ children, className, ...props }) => {
             const match = /language-(\w+)/.exec(className || "");
             const isInline = !match;
@@ -142,6 +90,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                   px={1}
                   py={0.5}
                   borderRadius="sm"
+                  bg="gray.100"
                   {...props}
                 >
                   {children}
@@ -159,42 +108,15 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
                 borderColor="gray.200"
                 fontSize="sm"
                 fontFamily="monospace"
+                mb={3}
                 {...props}
               >
                 <code className={className}>{children}</code>
               </Box>
             );
           },
-          h1: ({ children }) => (
-            <Heading as="h1" size="lg" mt={4} mb={2}>
-              {children}
-            </Heading>
-          ),
-          h2: ({ children }) => (
-            <Heading as="h2" size="md" mt={4} mb={2}>
-              {children}
-            </Heading>
-          ),
-          h3: ({ children }) => (
-            <Heading as="h3" size="sm" mt={3} mb={2}>
-              {children}
-            </Heading>
-          ),
-          ul: ({ children }) => (
-            <Box as="ul" pl={6} mb={3}>
-              {children}
-            </Box>
-          ),
-          ol: ({ children }) => (
-            <Box as="ol" pl={6} mb={3}>
-              {children}
-            </Box>
-          ),
-          li: ({ children }) => (
-            <Box as="li" mb={1}>
-              {children}
-            </Box>
-          ),
+
+          // Blockquotes
           blockquote: ({ children }) => (
             <Box
               borderLeft="4px solid"
@@ -204,9 +126,128 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
               mb={3}
               fontStyle="italic"
               color="gray.600"
+              bg="gray.50"
             >
               {children}
             </Box>
+          ),
+
+          // Tables
+          table: ({ children }) => (
+            <chakra.table
+              w="full"
+              borderCollapse="collapse"
+              mb={3}
+              border="1px solid"
+              borderColor="gray.200"
+            >
+              {children}
+            </chakra.table>
+          ),
+          thead: ({ children }) => (
+            <chakra.thead bg="gray.50">{children}</chakra.thead>
+          ),
+          tbody: ({ children }) => <chakra.tbody>{children}</chakra.tbody>,
+          tr: ({ children }) => <chakra.tr>{children}</chakra.tr>,
+          th: ({ children }) => (
+            <chakra.th
+              border="1px solid"
+              borderColor="gray.200"
+              p={2}
+              textAlign="left"
+              fontWeight="600"
+            >
+              {children}
+            </chakra.th>
+          ),
+          td: ({ children }) => (
+            <chakra.td border="1px solid" borderColor="gray.200" p={2}>
+              {children}
+            </chakra.td>
+          ),
+
+          // Links
+          a: ({ children, href }) => (
+            <Link
+              href={href}
+              color="blue.500"
+              textDecoration="underline"
+              _hover={{ color: "blue.600" }}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {children}
+            </Link>
+          ),
+
+          // Horizontal rule
+          hr: () => (
+            <chakra.hr
+              border="none"
+              borderTop="1px solid"
+              borderColor="gray.200"
+              my={4}
+            />
+          ),
+
+          // Strong and emphasis
+          strong: ({ children }) => (
+            <Text as="strong" fontWeight="600">
+              {children}
+            </Text>
+          ),
+          em: ({ children }) => (
+            <Text as="em" fontStyle="italic">
+              {children}
+            </Text>
+          ),
+
+          // Collapsible sections - Details and Summary
+          details: ({ children }) => (
+            <chakra.details
+              border="1px solid"
+              borderColor="gray.200"
+              borderRadius="md"
+              mb={3}
+              p={0}
+            >
+              {children}
+            </chakra.details>
+          ),
+          summary: ({ children }) => (
+            <chakra.summary
+              py={3}
+              px={4}
+              cursor="pointer"
+              fontWeight="500"
+              _hover={{ bg: "gray.50" }}
+              css={{
+                "&::-webkit-details-marker": {
+                  display: "none",
+                },
+              }}
+            >
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+              >
+                <Box flex="1" textAlign="left">
+                  {children}
+                </Box>
+                <chakra.span
+                  css={{
+                    transform: "rotate(0deg)",
+                    transition: "transform 0.2s",
+                    "details[open] &": {
+                      transform: "rotate(90deg)",
+                    },
+                  }}
+                >
+                  ▶
+                </chakra.span>
+              </Box>
+            </chakra.summary>
           ),
         }}
       >
