@@ -4,6 +4,7 @@ import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
 import axios from "axios";
+import bcrypt from "bcrypt";
 import { getAICharacter, isValidAICharacterId } from "./config/aiCharacters";
 
 // Inicjalizacje
@@ -53,7 +54,7 @@ app.post("/api/users/login", async (req: Request, res: Response) => {
     // Znajdź użytkownika po nazwie użytkownika
     const user = await prisma.user.findUnique({
       where: { username },
-      select: { id: true, username: true },
+      select: { id: true, username: true, passwordHash: true },
     });
 
     console.log("🔍 Znaleziony użytkownik:", user);
@@ -63,13 +64,75 @@ app.post("/api/users/login", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
-    // W prawdziwej aplikacji tutaj byłaby weryfikacja hasła
-    // Na razie akceptujemy dowolne hasło dla istniejących użytkowników
+    // Sprawdź hasło
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isPasswordValid) {
+      console.log("❌ Nieprawidłowe hasło");
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
     console.log("✅ Logowanie udane");
-    res.json(user);
+    res.json({ id: user.id, username: user.username });
   } catch (error) {
     console.error("💥 Error during login:", error);
     res.status(500).json({ error: "Could not process login" });
+  }
+});
+
+// Endpoint rejestracji użytkownika
+app.post("/api/users/register", async (req: Request, res: Response) => {
+  const { username, password } = req.body;
+
+  console.log("📝 Próba rejestracji:", { username });
+
+  if (!username || !password) {
+    console.log("❌ Brak username lub password");
+    return res
+      .status(400)
+      .json({ error: "Username and password are required" });
+  }
+
+  if (password.length < 6) {
+    console.log("❌ Hasło za krótkie");
+    return res
+      .status(400)
+      .json({ error: "Password must be at least 6 characters long" });
+  }
+
+  try {
+    // Sprawdź czy użytkownik już istnieje
+    const existingUser = await prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (existingUser) {
+      console.log("❌ Użytkownik już istnieje");
+      return res.status(409).json({ error: "Username already exists" });
+    }
+
+    // Zahashuj hasło
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    // Utwórz nowego użytkownika
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        passwordHash,
+      },
+      select: {
+        id: true,
+        username: true,
+        createdAt: true,
+      },
+    });
+
+    console.log("✅ Rejestracja udana:", newUser);
+    res.status(201).json(newUser);
+  } catch (error) {
+    console.error("💥 Error during registration:", error);
+    res.status(500).json({ error: "Could not process registration" });
   }
 });
 
@@ -288,7 +351,10 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     });
 
     res.json({
-      response: typeof aiResponse === "string" ? aiResponse : JSON.stringify(aiResponse),
+      response:
+        typeof aiResponse === "string"
+          ? aiResponse
+          : JSON.stringify(aiResponse),
       aiCharacter: aiCharacter.name,
       memoriesUsed,
     });

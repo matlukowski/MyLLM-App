@@ -23,7 +23,7 @@ import { toast } from "react-toastify";
 const AuthForm = () => {
   const [isLogin, setIsLogin] = useState(true);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [inputs, setInputs] = useState({
     username: "",
@@ -61,7 +61,21 @@ const AuthForm = () => {
         return;
       }
 
-      toast.info("Rejestracja nie jest jeszcze zaimplementowana");
+      if (inputs.password.length < 6) {
+        toast.error("Hasło musi mieć co najmniej 6 znaków");
+        return;
+      }
+
+      setIsLoading(true);
+      const result = await register(inputs.username, inputs.password);
+      setIsLoading(false);
+
+      if (result.success) {
+        toast.success("Konto zostało utworzone pomyślnie!");
+        navigate("/chat");
+      } else {
+        toast.error(result.error || "Wystąpił błąd podczas rejestracji");
+      }
     }
   };
 

@@ -10,15 +10,14 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  // ... inne pola użytkownika (np. passwordHash, avatarUrl)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String   // Zahashowane hasło
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   sentMessages     Message[]         @relation("SentMessages")
   chatParticipants ChatParticipant[] // W jakich czatach użytkownik uczestniczy
-  // ... inne relacje, np. do postów
 }
 
 // Reprezentuje pojedynczą konwersację

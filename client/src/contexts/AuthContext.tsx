@@ -14,6 +14,10 @@ interface User {
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<boolean>;
+  register: (
+    username: string,
+    password: string
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -89,6 +93,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const register = async (
+    username: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      console.log("📝 Frontend: Próba rejestracji", { username });
+
+      const response = await fetch(`http://localhost:3001/api/users/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      console.log("📡 Frontend: Odpowiedź serwera rejestracji", {
+        status: response.status,
+        statusText: response.statusText,
+      });
+
+      if (response.ok) {
+        const userData = await response.json();
+        console.log("✅ Frontend: Rejestracja udana", userData);
+        // Automatycznie zaloguj użytkownika po rejestracji
+        setUser({ id: userData.id, username: userData.username });
+        localStorage.setItem(
+          "currentUser",
+          JSON.stringify({ id: userData.id, username: userData.username })
+        );
+        return { success: true };
+      } else {
+        const errorData = await response.json();
+        console.log("❌ Frontend: Błąd rejestracji", errorData);
+        return { success: false, error: errorData.error };
+      }
+    } catch (error) {
+      console.error("💥 Frontend: Błąd podczas rejestracji:", error);
+      return { success: false, error: "Wystąpił błąd podczas rejestracji" };
+    }
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem("currentUser");
@@ -97,6 +142,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value = {
     user,
     login,
+    register,
     logout,
     isLoading,
   };
