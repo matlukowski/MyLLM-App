@@ -274,6 +274,7 @@ const ApiKeysModal: React.FC<ApiKeysModalProps> = ({ isOpen, onClose }) => {
                             type="text"
                             fontSize="sm"
                             fontFamily="mono"
+                            color="gray.800"
                           />
                           <Button
                             onClick={() => handleSaveKey(provider.id)}
