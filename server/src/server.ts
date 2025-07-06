@@ -5,7 +5,6 @@ import cors from "cors";
 import { PrismaClient } from "@prisma/client";
 import axios from "axios";
 import bcrypt from "bcrypt";
-import { getAICharacter, isValidAICharacterId } from "./config/aiCharacters";
 
 // Inicjalizacje
 const prisma = new PrismaClient();
@@ -291,41 +290,28 @@ app.post("/api/chats", async (req: Request, res: Response) => {
 
 // Endpoint do czatu z AI (z pamięcią długoterminową RAG)
 app.post("/api/ai/chat", async (req: Request, res: Response) => {
-  const { userId, aiCharId, userMessage, chatHistory } = req.body;
+  const { userId, modelId, userMessage, chatHistory } = req.body;
 
-  if (!userId || !aiCharId || !userMessage) {
+  if (!userId || !modelId || !userMessage) {
     return res.status(400).json({
-      error: "userId, aiCharId i userMessage są wymagane",
-    });
-  }
-
-  // Sprawdź czy postać AI istnieje
-  if (!isValidAICharacterId(aiCharId)) {
-    return res.status(404).json({
-      error: "Nieznana postać AI",
-    });
-  }
-
-  const aiCharacter = getAICharacter(aiCharId);
-  if (!aiCharacter) {
-    return res.status(404).json({
-      error: "Błąd konfiguracji postaci AI",
+      error: "userId, modelId i userMessage są wymagane",
     });
   }
 
   try {
-    // Przygotuj dane dla serwisu RAG
+    // Przygotuj dane dla serwisu RAG z domyślnym promptem
     const ragRequest = {
       userId,
-      aiCharId,
+      aiCharId: "default-ai",
       userMessage,
       chatHistory: chatHistory || [],
-      characterPrompt: aiCharacter.prompt,
+      characterPrompt:
+        "Jesteś pomocnym asystentem AI. Odpowiadaj w sposób przystępny i pomocny.",
     };
 
     console.log("🤖 Wysyłanie żądania do serwisu RAG:", {
       userId,
-      aiCharId,
+      modelId,
       userMessage: userMessage.substring(0, 50) + "...",
       historyLength: chatHistory?.length || 0,
     });
@@ -355,7 +341,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
         typeof aiResponse === "string"
           ? aiResponse
           : JSON.stringify(aiResponse),
-      aiCharacter: aiCharacter.name,
+      modelId: modelId,
       memoriesUsed,
     });
   } catch (error: any) {
