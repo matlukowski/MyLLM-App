@@ -30,7 +30,7 @@ import {
   type LLMModel,
 } from "../../types/types";
 import MarkdownRenderer from "../ui/MarkdownRenderer";
-import TypewriterMarkdown from "../ui/TypewriterMarkdown";
+import StreamingMarkdown from "../ui/StreamingMarkdown";
 
 // Animacja migającego kursora
 const blinkAnimation = keyframes`
@@ -205,6 +205,32 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     loadChatHistory();
   }, [chatId, isNewChat, user?.id]);
 
+  // Funkcja do symulacji streamingu tekstu
+  const simulateStreaming = async (messageId: string, fullText: string) => {
+    const words = fullText.split(" ");
+    let currentContent = "";
+
+    for (let i = 0; i < words.length; i++) {
+      currentContent += (i > 0 ? " " : "") + words[i];
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, content: currentContent } : msg
+        )
+      );
+
+      // Dodaj małe opóźnienie między słowami
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+
+    // Zakończ streaming
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId ? { ...msg, isTyping: false } : msg
+      )
+    );
+  };
+
   // Wyślij wiadomość do AI
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,16 +299,20 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         setChatTitle(data.chatTitle);
       }
 
-      // 6. Dodaj odpowiedź AI do lokalnego stanu
+      // 6. Dodaj pustą wiadomość AI i rozpocznij streaming
+      const aiMessageId = `ai-${Date.now()}`;
       const aiMessage: ChatMessage = {
-        id: `ai-${Date.now()}`,
-        content: data.response,
+        id: aiMessageId,
+        content: "",
         timestamp: new Date(),
         role: "assistant",
         modelId: selectedModel,
         isTyping: true,
       };
       setMessages((prev) => [...prev, aiMessage]);
+
+      // 7. Symuluj streaming poprzez stopniowe dodawanie tekstu
+      await simulateStreaming(aiMessageId, data.response);
     } catch (error: any) {
       console.error("Błąd podczas wysyłania wiadomości do AI:", error);
       setError(error.message || "Wystąpił nieoczekiwany błąd");
@@ -518,18 +548,9 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                             {message.content}
                           </Text>
                         ) : message.isTyping ? (
-                          <TypewriterMarkdown
-                            text={message.content}
-                            speed={5}
-                            onComplete={() => {
-                              setMessages((prev) =>
-                                prev.map((msg) =>
-                                  msg.id === message.id
-                                    ? { ...msg, isTyping: false }
-                                    : msg
-                                )
-                              );
-                            }}
+                          <StreamingMarkdown
+                            content={message.content}
+                            isStreaming={message.isTyping}
                           />
                         ) : (
                           <MarkdownRenderer

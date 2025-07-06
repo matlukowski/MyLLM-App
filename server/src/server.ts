@@ -167,7 +167,7 @@ app.get("/api/chats", async (req: Request, res: Response) => {
     });
 
     const chats = userChatParticipants.map((p) => {
-      const chat = p.chat;
+      const chat = p.chat as any; // Rzutowanie typu, aby uzyskać dostęp do pól title i metadata
       const lastMessage = chat.messages[0];
       const metadata = chat.metadata as any;
 
@@ -331,8 +331,8 @@ app.post("/api/ai/chats", async (req: Request, res: Response) => {
         metadata: {
           modelId,
           isAIChat: true,
-        } as any,
-      },
+        },
+      } as any, // Rzutowanie typu dla pól title i metadata
       include: {
         participants: {
           include: {
@@ -385,8 +385,8 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
           metadata: {
             modelId,
             isAIChat: true,
-          } as any,
-        },
+          },
+        } as any, // Rzutowanie typu dla pól title i metadata
       });
 
       currentChatId = newChat.id;
