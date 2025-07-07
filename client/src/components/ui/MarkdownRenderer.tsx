@@ -1,9 +1,20 @@
-import React from "react";
+import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { Box, Code, Text, Heading, Link, chakra } from "@chakra-ui/react";
-import "highlight.js/styles/github.css";
+import {
+  Box,
+  Code,
+  Text,
+  Heading,
+  Link,
+  chakra,
+  Button,
+  Icon,
+  HStack,
+} from "@chakra-ui/react";
+import { FiCopy, FiCheck } from "react-icons/fi";
+import "highlight.js/styles/github-dark.css";
 
 interface MarkdownRendererProps {
   content: string;
@@ -79,39 +90,82 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 
           // Code blocks and inline code
           code: ({ children, className, ...props }) => {
-            const match = /language-(\w+)/.exec(className || "");
+            const match = /language-(\w+)(?::(.*?))?/.exec(className || "");
             const isInline = !match;
+            const [hasCopied, setHasCopied] = useState(false);
+
+            const lang = match?.[1] || "";
+            const filename = match?.[2] || "";
+            const codeText = String(children).replace(/\n$/, "");
+
+            const handleCopy = () => {
+              navigator.clipboard.writeText(codeText).then(() => {
+                setHasCopied(true);
+                setTimeout(() => setHasCopied(false), 2000);
+              });
+            };
 
             if (isInline) {
               return (
                 <Code
-                  colorScheme="red"
-                  fontSize="0.875em"
-                  px={1}
-                  py={0.5}
-                  borderRadius="sm"
-                  bg="gray.100"
+                  fontWeight="semibold"
+                  bg="transparent"
+                  p={0}
+                  color="inherit"
                   {...props}
                 >
                   {children}
                 </Code>
               );
             }
+
             return (
-              <Box
-                as="pre"
-                bg="gray.50"
-                p={4}
-                borderRadius="md"
-                overflow="auto"
-                border="1px solid"
-                borderColor="gray.200"
-                fontSize="sm"
-                fontFamily="monospace"
-                mb={3}
-                {...props}
-              >
-                <code className={className}>{children}</code>
+              <Box position="relative" mb={4}>
+                {filename && (
+                  <Box
+                    bg="gray.700"
+                    color="gray.200"
+                    px={4}
+                    py={2}
+                    borderTopRadius="md"
+                    fontSize="sm"
+                    fontFamily="mono"
+                  >
+                    {filename}
+                  </Box>
+                )}
+                <Button
+                  size="sm"
+                  position="absolute"
+                  top={filename ? "calc(2.5rem + 8px)" : "8px"}
+                  right="8px"
+                  onClick={handleCopy}
+                  zIndex={1}
+                  variant="ghost"
+                  colorScheme="gray"
+                  aria-label="Copy code"
+                >
+                  <HStack gap={2}>
+                    <Icon as={hasCopied ? FiCheck : FiCopy} />
+                    <Text>{hasCopied ? "Skopiowano" : "Kopiuj"}</Text>
+                  </HStack>
+                </Button>
+                <Box
+                  as="pre"
+                  p={4}
+                  overflow="auto"
+                  fontSize="sm"
+                  fontFamily="monospace"
+                  border="1px solid"
+                  borderColor="gray.200"
+                  bg="gray.800"
+                  color="white"
+                  borderBottomRadius="md"
+                  borderTopRadius={filename ? "none" : "md"}
+                  {...props}
+                >
+                  <code className={`language-${lang}`}>{children}</code>
+                </Box>
               </Box>
             );
           },

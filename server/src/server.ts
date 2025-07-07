@@ -478,7 +478,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
         `${RAG_SERVICE_URL}/chat`,
         ragRequest,
         {
-          timeout: 5000, // 5 sekund timeout
+          timeout: 30000, // 30 sekund timeout
           headers: {
             "Content-Type": "application/json",
           },

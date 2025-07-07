@@ -573,33 +573,45 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                           position="absolute"
                           top={2}
                           right={2}
-                          size="md"
+                          size="sm"
                           variant="ghost"
-                          color="gray.400"
-                          minW="auto"
-                          h="auto"
-                          p={1}
+                          color="gray.500"
                           onClick={() =>
                             copyMessage(message.id, message.content)
                           }
                           _hover={{
-                            color: "gray.600",
-                            bg: "gray.100",
+                            color: "gray.800",
+                            bg: "blackAlpha.100",
                           }}
                           _groupHover={{ opacity: 1 }}
-                          transition="opacity 0.2s"
+                          transition="opacity 0.2s, background-color 0.2s"
+                          aria-label="Kopiuj wiadomość"
+                          p={2}
                         >
-                          <Icon
-                            as={
-                              copiedId === message.id
-                                ? HiOutlineCheck
-                                : HiOutlineClipboardDocument
-                            }
-                            boxSize={3}
-                            color={
-                              copiedId === message.id ? "green.500" : undefined
-                            }
-                          />
+                          <HStack gap={1.5}>
+                            <Icon
+                              as={
+                                copiedId === message.id
+                                  ? HiOutlineCheck
+                                  : HiOutlineClipboardDocument
+                              }
+                              boxSize={4}
+                              color={
+                                copiedId === message.id
+                                  ? "green.500"
+                                  : "currentColor"
+                              }
+                            />
+                            <Text
+                              fontSize="xs"
+                              fontWeight="medium"
+                              lineHeight={1}
+                            >
+                              {copiedId === message.id
+                                ? "Skopiowano"
+                                : "Kopiuj"}
+                            </Text>
+                          </HStack>
                         </Button>
                       </Box>
                     </VStack>
