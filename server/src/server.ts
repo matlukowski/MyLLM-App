@@ -403,13 +403,21 @@ app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint do czatu z AI (z pamięcią długoterminową RAG)
+// Zaktualizowany endpoint do czatu z AI
 app.post("/api/ai/chat", async (req: Request, res: Response) => {
-  const { userId, modelId, userMessage, chatHistory, chatId } = req.body;
+  const { userId, modelId, userMessage, chatHistory, chatId, apiKey } =
+    req.body;
 
   if (!userId || !modelId || !userMessage) {
     return res.status(400).json({
       error: "userId, modelId i userMessage są wymagane",
+    });
+  }
+
+  if (!apiKey) {
+    return res.status(401).json({
+      error:
+        "Klucz API od Google jest wymagany. Dodaj go w ustawieniach kluczy API.",
     });
   }
 
@@ -419,7 +427,6 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
 
     // Jeśli nie ma chatId, utwórz nowy czat
     if (!currentChatId) {
-      // Wygeneruj tytuł na podstawie pierwszej wiadomości (pierwsze 50 znaków)
       chatTitle =
         userMessage.length > 50
           ? userMessage.substring(0, 50) + "..."
@@ -435,7 +442,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
             modelId,
             isAIChat: true,
           },
-        } as any, // Rzutowanie typu dla pól title i metadata
+        } as any,
       });
 
       currentChatId = newChat.id;
@@ -451,62 +458,49 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       },
     });
 
-    // Przygotuj dane dla serwisu RAG z domyślnym promptem
-    const ragRequest = {
-      userId,
-      aiCharId: "default-ai",
-      userMessage,
-      chatHistory: chatHistory || [],
-      characterPrompt:
-        "Jesteś pomocnym asystentem AI. Odpowiadaj w sposób przystępny i pomocny.",
-    };
+    // Mapowanie historii czatu do formatu Google Gemini
+    const contents = [
+      ...(chatHistory || []).map((msg: any) => ({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }],
+      })),
+      {
+        role: "user",
+        parts: [{ text: userMessage }],
+      },
+    ];
 
-    console.log("🤖 Generowanie odpowiedzi AI:", {
-      userId,
+    console.log("🤖 Generowanie odpowiedzi AI z Google Gemini:", {
       modelId,
-      userMessage: userMessage.substring(0, 50) + "...",
-      historyLength: chatHistory?.length || 0,
       chatId: currentChatId,
     });
 
     let aiResponse = "";
-    let memoriesUsed = 0;
+    const geminiModelId = modelId.replace("2.5", "1.5"); // Konwersja na model obsługiwany przez API
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelId}:generateContent?key=${apiKey}`;
 
-    // Sprawdź czy serwis RAG jest dostępny
     try {
-      const ragResponse = await axios.post(
-        `${RAG_SERVICE_URL}/chat`,
-        ragRequest,
+      const geminiResponse = await axios.post(
+        geminiApiUrl,
+        { contents },
         {
-          timeout: 30000, // 30 sekund timeout
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
+          timeout: 60000,
         }
       );
 
-      aiResponse = ragResponse.data.response;
-      memoriesUsed = ragResponse.data.memories_used || 0;
-      console.log("✅ Używam serwisu RAG");
-    } catch (ragError: any) {
-      console.log("⚠️ Serwis RAG niedostępny, używam mockowej odpowiedzi");
-
-      // Prosta mockowa odpowiedź AI
-      const mockResponses = [
-        "Cześć! Jak mogę Ci pomóc?",
-        "To ciekawe pytanie! Pozwól mi na nie odpowiedzieć...",
-        "Dzięki za wiadomość! Oto co myślę na ten temat:",
-        "Świetnie! Chętnie pomogę Ci z tym problemem.",
-        "To jest bardzo interesujące zagadnienie. Według mnie...",
-        "Rozumiem Twoje pytanie. Postaram się je szczegółowo wyjaśnić.",
-        "Witaj! Cieszę się, że możemy porozmawiać na ten temat.",
-        "Bardzo dobra obserwacja! Rzeczywiście...",
-      ];
-
-      const randomResponse =
-        mockResponses[Math.floor(Math.random() * mockResponses.length)];
-      aiResponse = `${randomResponse}\n\n*Uwaga: Obecnie używam prostej mockowej odpowiedzi. Aby uzyskać pełną funkcjonalność AI, uruchom serwis RAG zgodnie z instrukcjami w folderze ai-rag-service.*`;
-      memoriesUsed = 0;
+      aiResponse =
+        geminiResponse.data.candidates[0]?.content.parts[0]?.text ||
+        "Przepraszam, nie udało mi się wygenerować odpowiedzi.";
+    } catch (apiError: any) {
+      console.error(
+        "❌ Błąd podczas komunikacji z Google Gemini API:",
+        apiError.response?.data || apiError.message
+      );
+      return res.status(500).json({
+        error:
+          "Błąd komunikacji z Google Gemini API. Sprawdź swój klucz API i spróbuj ponownie.",
+      });
     }
 
     // Zapisz odpowiedź AI
@@ -524,25 +518,19 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       data: { updatedAt: new Date() },
     });
 
-    console.log("✅ Odpowiedź AI wygenerowana:", {
+    console.log("✅ Odpowiedź AI z Gemini wygenerowana:", {
       responseLength: aiResponse.length,
-      memoriesUsed,
       chatId: currentChatId,
     });
 
     res.json({
-      response:
-        typeof aiResponse === "string"
-          ? aiResponse
-          : JSON.stringify(aiResponse),
-      modelId: modelId,
-      memoriesUsed,
+      response: aiResponse,
+      modelId,
       chatId: currentChatId,
       chatTitle: chatTitle || undefined,
     });
   } catch (error: any) {
     console.error("❌ Błąd przetwarzania żądania AI:", error.message);
-
     res.status(500).json({
       error: "Wystąpił błąd podczas przetwarzania żądania AI",
     });

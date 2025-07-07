@@ -64,37 +64,28 @@ export interface ApiKey {
 // Konfiguracja dostępnych modeli LLM
 export const AVAILABLE_LLM_MODELS: LLMModel[] = [
   {
-    id: "gpt-4.1",
-    name: "GPT-4.1",
-    provider: "OpenAI",
-    description: "Najnowszy model GPT-4.1 z ulepszonymi możliwościami",
-    maxTokens: 128000,
-    isPopular: true,
-  },
-
-  {
-    id: "claude-4-sonnet",
-    name: "Claude 4 Sonnet",
-    provider: "Anthropic",
-    description: "Najnowszy model Claude 4 z zaawansowanymi możliwościami",
-    maxTokens: 200000,
-    isPopular: true,
-  },
-  {
     id: "gemini-flash-2.5",
     name: "Gemini Flash 2.5",
     provider: "Google",
     description: "Szybki i wydajny model Gemini Flash 2.5",
-    maxTokens: 32768,
+    maxTokens: 1000000,
     isPopular: true,
   },
-
   {
-    id: "claude-3-opus",
-    name: "Claude 3 Opus",
-    provider: "Anthropic",
-    description: "Najbardziej zaawansowany model Claude 3",
-    maxTokens: 200000,
+    id: "gemini-2.5-flash-thinking",
+    name: "Gemini 2.5 Flash Thinking",
+    provider: "Google",
+    description: "Model zoptymalizowany pod kątem złożonych zadań",
+    maxTokens: 1500000,
+    isPopular: true,
+  },
+  {
+    id: "gemini-2.5-pro",
+    name: "Gemini 2.5 Pro",
+    provider: "Google",
+    description: "Zaawansowany model Gemini 2.5 Pro",
+    maxTokens: 2000000,
+    isPopular: true,
   },
 ];
 

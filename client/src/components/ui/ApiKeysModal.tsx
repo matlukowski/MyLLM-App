@@ -30,20 +30,6 @@ interface ApiKeysModalProps {
 
 const API_PROVIDERS = [
   {
-    id: "openai",
-    name: "OpenAI",
-    description: "Klucz API dla modeli GPT-4, GPT-4.1, GPT-4 Turbo",
-    placeholder: "sk-...",
-    helpText: "Znajdź swój klucz API na platform.openai.com",
-  },
-  {
-    id: "anthropic",
-    name: "Anthropic",
-    description: "Klucz API dla modeli Claude",
-    placeholder: "sk-ant-...",
-    helpText: "Znajdź swój klucz API na console.anthropic.com",
-  },
-  {
     id: "google",
     name: "Google",
     description: "Klucz API dla modeli Gemini",

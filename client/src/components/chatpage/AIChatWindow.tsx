@@ -33,12 +33,10 @@ import {
   HiOutlineUser,
   HiOutlineClipboardDocument,
   HiOutlineCheck,
-  HiOutlineCog6Tooth,
 } from "react-icons/hi2";
 import {
   AVAILABLE_LLM_MODELS,
   getLLMModel,
-  getPopularLLMModels,
   type LLMModel,
 } from "../../types/types";
 import MarkdownRenderer from "../ui/MarkdownRenderer";
@@ -70,7 +68,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>(
-    getPopularLLMModels()[0]?.id || "gpt-4.1"
+    AVAILABLE_LLM_MODELS[0]?.id || ""
   );
   const [chatTitle, setChatTitle] = useState<string>("");
   const [isJustCreated, setIsJustCreated] = useState(false); // Flaga dla świeżo utworzonych czatów
@@ -214,13 +212,20 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       console.log("💬 Dodaję wiadomość użytkownika:", userMessage.id);
       setMessages((prev) => [...prev, userMessage]);
 
-      // 2. Przygotuj historię czatu (ostatnie 10 wiadomości)
+      // 2. Pobierz klucz API Google z localStorage
+      const savedKeysRaw = localStorage.getItem("apiKeys");
+      const savedKeys = savedKeysRaw ? JSON.parse(savedKeysRaw) : [];
+      const googleApiKey = savedKeys.find(
+        (key: any) => key.provider === "google"
+      )?.key;
+
+      // 3. Przygotuj historię czatu (ostatnie 10 wiadomości)
       const chatHistory = [...messages, userMessage].slice(-10).map((msg) => ({
         role: msg.role === "user" ? "user" : "assistant",
         content: msg.content,
       }));
 
-      // 3. Wyślij żądanie do backendu AI
+      // 4. Wyślij żądanie do backendu AI
       const response = await fetch("http://localhost:3001/api/ai/chat", {
         method: "POST",
         headers: {
@@ -232,6 +237,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           userMessage: userMessageContent,
           chatHistory,
           chatId: isNewChat ? null : chatId,
+          apiKey: googleApiKey, // Prześlij klucz API
         }),
       });
 
@@ -693,22 +699,11 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                   outline: "none",
                 }}
               >
-                <optgroup label="Popularne">
-                  {getPopularLLMModels().map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} ({model.provider})
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Wszystkie">
-                  {AVAILABLE_LLM_MODELS.filter((m) => !m.isPopular).map(
-                    (model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.name} ({model.provider})
-                      </option>
-                    )
-                  )}
-                </optgroup>
+                {AVAILABLE_LLM_MODELS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} ({model.provider})
+                  </option>
+                ))}
               </select>
             </HStack>
 
