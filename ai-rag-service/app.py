@@ -1,3 +1,17 @@
+# MONKEY PATCH to disable posthog telemetry in chromadb
+try:
+    import posthog
+    def disabled_capture(*args, **kwargs):
+        # This function does nothing, effectively disabling telemetry.
+        pass
+    posthog.capture = disabled_capture
+    print("PostHog telemetry has been successfully disabled by monkey patch.")
+except ImportError:
+    print("PostHog not found, skipping telemetry patch.")
+except Exception as e:
+    print(f"Failed to apply PostHog telemetry patch: {e}")
+
+
 import os
 import uuid
 from datetime import datetime
@@ -49,7 +63,10 @@ def initialize_chroma_db():
         embedding_function = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
         
         # Inicjalizacja ChromaDB client
-        chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+        chroma_client = chromadb.PersistentClient(
+            path=CHROMA_DB_PATH,
+            settings=Settings(anonymized_telemetry=False)
+        )
         
         # Pobierz lub utwórz kolekcję
         try:
