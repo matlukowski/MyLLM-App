@@ -283,7 +283,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
             content: data.response,
             timestamp: new Date(),
             role: "assistant",
-            modelId: selectedModel,
+            modelId: data.modelId, // Użyj modelId zwróconego z serwera
             isAnimating: true,
           },
         ]);
