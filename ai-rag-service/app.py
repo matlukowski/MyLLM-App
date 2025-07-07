@@ -1,7 +1,7 @@
 import os
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -10,6 +10,8 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 import google.generativeai as genai
+import threading
+import time
 
 load_dotenv()
 
@@ -22,25 +24,66 @@ GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 CHROMA_DB_PATH = os.getenv('CHROMA_DB_PATH', './chroma_db')
 FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
 
-# Inicjalizacja Google Gemini API
+# Inicjalizacja Google Gemini API (szybka operacja)
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Inicjalizacja ChromaDB
-chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-embedding_function = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+# Globalne zmienne dla lazy loading
+chroma_client = None
+collection = None
+embedding_function = None
+_initialization_lock = threading.Lock()
+_initialization_complete = False
 
-# Pobierz lub utwórz kolekcję
-try:
-    collection = chroma_client.get_collection(
-        name="ai_chat_memories",
-        embedding_function=embedding_function
-    )
-except:
-    collection = chroma_client.create_collection(
-        name="ai_chat_memories",
-        embedding_function=embedding_function
-    )
+def initialize_chroma_db():
+    """
+    Inicjalizuje ChromaDB i embedding function w tle
+    """
+    global chroma_client, collection, embedding_function, _initialization_complete
+    
+    try:
+        print("Inicjalizacja ChromaDB...")
+        start_time = time.time()
+        
+        # Inicjalizacja embedding function
+        embedding_function = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+        
+        # Inicjalizacja ChromaDB client
+        chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
+        
+        # Pobierz lub utwórz kolekcję
+        try:
+            collection = chroma_client.get_collection(
+                name="ai_chat_memories",
+                embedding_function=embedding_function
+            )
+        except:
+            collection = chroma_client.create_collection(
+                name="ai_chat_memories",
+                embedding_function=embedding_function
+            )
+        
+        _initialization_complete = True
+        elapsed_time = time.time() - start_time
+        print(f"ChromaDB zainicjalizowana w {elapsed_time:.2f} sekund")
+        
+    except Exception as e:
+        print(f"Błąd podczas inicjalizacji ChromaDB: {e}")
+        _initialization_complete = False
+
+def ensure_chroma_initialized():
+    """
+    Zapewnia że ChromaDB jest zainicjalizowana przed użyciem
+    """
+    global _initialization_complete
+    
+    if not _initialization_complete:
+        with _initialization_lock:
+            if not _initialization_complete:
+                initialize_chroma_db()
+    
+    if not _initialization_complete:
+        raise Exception("ChromaDB nie została zainicjalizowana")
 
 def save_memory_chunk(user_id: str, ai_char_id: str, text: str, interaction_id: str, message_type: str):
     """
@@ -54,6 +97,8 @@ def save_memory_chunk(user_id: str, ai_char_id: str, text: str, interaction_id: 
         message_type: 'user' lub 'ai'
     """
     try:
+        ensure_chroma_initialized()
+        
         document_id = f"{interaction_id}_{message_type}"
         
         collection.add(
@@ -85,6 +130,8 @@ def retrieve_memory_chunks(user_id: str, ai_char_id: str, query_text: str, n_res
         Lista fragmentów tekstu z pamięci
     """
     try:
+        ensure_chroma_initialized()
+        
         results = collection.query(
             query_texts=[query_text],
             n_results=n_results,
@@ -218,9 +265,28 @@ def chat():
 @app.route('/health', methods=['GET'])
 def health():
     """Endpoint do sprawdzenia stanu serwisu"""
-    return jsonify({'status': 'healthy', 'service': 'AI RAG Service'})
+    status = 'healthy' if _initialization_complete else 'initializing'
+    return jsonify({
+        'status': status, 
+        'service': 'AI RAG Service',
+        'chroma_ready': _initialization_complete
+    })
+
+@app.route('/status', methods=['GET'])
+def status():
+    """Endpoint do sprawdzenia szczegółowego stanu inicjalizacji"""
+    return jsonify({
+        'chroma_initialized': _initialization_complete,
+        'service': 'AI RAG Service'
+    })
 
 if __name__ == '__main__':
     print(f"Uruchamianie serwisu RAG na porcie {FLASK_PORT}")
     print(f"ChromaDB path: {CHROMA_DB_PATH}")
+    print("Serwis uruchamia się natychmiast, ChromaDB inicjalizuje się w tle...")
+    
+    # Uruchom inicjalizację ChromaDB w tle
+    init_thread = threading.Thread(target=initialize_chroma_db, daemon=True)
+    init_thread.start()
+    
     app.run(host='0.0.0.0', port=FLASK_PORT, debug=True) 
