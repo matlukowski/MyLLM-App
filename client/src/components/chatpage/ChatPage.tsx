@@ -1,6 +1,6 @@
 // src/components/ChatPage.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { HiBars3, HiXMark } from "react-icons/hi2";
 import {
   Box,
@@ -13,7 +13,7 @@ import {
 } from "@chakra-ui/react";
 import { useAuth } from "../../contexts/AuthContext";
 import AIChatWindow from "./AIChatWindow";
-import SidebarContent from "./SidebarContent";
+import SidebarContent, { SidebarContentRef } from "./SidebarContent";
 import { HiOutlineChatBubbleLeftEllipsis } from "react-icons/hi2";
 
 // --- Interfejs ---
@@ -30,6 +30,9 @@ const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
   const { user } = useAuth();
+
+  // Ref do SidebarContent
+  const sidebarRef = useRef<SidebarContentRef>(null);
 
   // Obsługa zmiany rozmiaru okna
   useEffect(() => {
@@ -75,10 +78,13 @@ const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
   };
 
   // Callback do odświeżania listy czatów po utworzeniu nowego
-  const handleChatCreated = (newChatId: string) => {
+  const handleChatCreated = async (newChatId: string) => {
     setActiveChatId(newChatId);
     setIsNewChatMode(false);
-    // Tutaj można dodać logikę odświeżania listy czatów w sidebarze
+    // Odśwież listę czatów w sidebarze
+    if (sidebarRef.current) {
+      await sidebarRef.current.refreshChats();
+    }
   };
 
   const toggleSidebar = () => {
@@ -134,6 +140,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
         display={!isMobile || isSidebarOpen ? "block" : "none"}
       >
         <SidebarContent
+          ref={sidebarRef}
           activeChatId={activeChatId}
           setActiveChatId={setActiveChatId}
           onChatSelect={handleChatSelect}
