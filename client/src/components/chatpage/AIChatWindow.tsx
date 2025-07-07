@@ -573,7 +573,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                           position="absolute"
                           top={2}
                           right={2}
-                          size="xs"
+                          size="md"
                           variant="ghost"
                           color="gray.400"
                           minW="auto"
@@ -586,7 +586,6 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                             color: "gray.600",
                             bg: "gray.100",
                           }}
-                          opacity={0}
                           _groupHover={{ opacity: 1 }}
                           transition="opacity 0.2s"
                         >
