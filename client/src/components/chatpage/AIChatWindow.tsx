@@ -13,6 +13,7 @@ import {
   Spinner,
   Icon,
   Badge,
+  IconButton,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
 
@@ -34,6 +35,7 @@ import {
   HiOutlineClipboardDocument,
   HiOutlineCheck,
 } from "react-icons/hi2";
+import { FaBrain } from "react-icons/fa";
 import {
   AVAILABLE_LLM_MODELS,
   getLLMModel,
@@ -177,7 +179,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           );
 
           console.log(
-            "📋 Załadowano wiadomości z serwera:",
+            "�� Załadowano wiadomości z serwera:",
             formattedMessages.length,
             formattedMessages
           );
@@ -231,9 +233,9 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         (key: any) => key.provider === "google"
       )?.key;
 
-      // 3. Przygotuj historię czatu (ostatnie 10 wiadomości)
-      const chatHistory = [...messages, userMessage].slice(-10).map((msg) => ({
-        role: msg.role === "user" ? "user" : "assistant",
+      // 3. Przygotuj historię czatu (bez bieżącej wiadomości)
+      const chatHistory = messages.slice(-10).map((msg) => ({
+        role: msg.role === "user" ? "user" : "model",
         content: msg.content,
       }));
 
@@ -659,7 +661,9 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                   <HStack gap={2}>
                     <Spinner size="xs" color="gray.400" />
                     <Text fontSize="sm" color="gray.600">
-                      Pisze...
+                      {selectedModel === "gemini-2.5-pro"
+                        ? "Model myśli, proszę czekać..."
+                        : "Pisze..."}
                     </Text>
                   </HStack>
                 </Box>
@@ -683,9 +687,12 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           <VStack gap={3}>
             {/* Wybór modelu */}
             <HStack w="full" justify="space-between" align="center">
-              <Text fontSize="sm" color="gray.600" fontWeight="500">
-                Model AI:
-              </Text>
+              <HStack>
+                <Text fontSize="sm" color="gray.600" fontWeight="500">
+                  Model AI:
+                </Text>
+              </HStack>
+
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}

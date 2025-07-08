@@ -425,6 +425,11 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     let currentChatId = chatId;
     let chatTitle = "";
 
+    // Konfiguracja specyficzna dla modelu
+    const isProModel = modelId === "gemini-2.5-pro";
+    const timeout = isProModel ? 600000 : 120000; // 10 minut dla Pro, 2 minuty dla Flash
+    const maxOutputTokens = isProModel ? 32768 : 8192; // 32k dla Pro, 8k dla Flash
+
     // Jeśli nie ma chatId, utwórz nowy czat
     if (!currentChatId) {
       chatTitle =
@@ -470,29 +475,71 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       },
     ];
 
+    const payload: any = {
+      contents,
+      generationConfig: {
+        maxOutputTokens,
+      },
+    };
+
     console.log("🤖 Generowanie odpowiedzi AI z Google Gemini:", {
       modelId,
       chatId: currentChatId,
     });
 
     let aiResponse = "";
-    const geminiModelId = modelId; // Użyj bezpośrednio ID modelu z frontendu
+    const geminiModelId = modelId;
     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelId}:generateContent?key=${apiKey}`;
 
     try {
-      const geminiResponse = await axios.post(
-        geminiApiUrl,
-        { contents },
-        {
-          headers: { "Content-Type": "application/json" },
-          timeout: 60000,
-        }
-      );
+      const geminiResponse = await axios.post(geminiApiUrl, payload, {
+        headers: { "Content-Type": "application/json" },
+        timeout,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
 
-      aiResponse =
-        geminiResponse.data.candidates[0]?.content.parts[0]?.text ||
-        "Przepraszam, nie udało mi się wygenerować odpowiedzi.";
+      const candidate = geminiResponse.data.candidates?.[0];
+
+      if (candidate) {
+        const parts = candidate.content?.parts;
+        if (parts && Array.isArray(parts)) {
+          const responseChunks: string[] = [];
+          for (const part of parts) {
+            if (part.text) {
+              responseChunks.push(part.text);
+            } else if (part.code_execution_result?.output) {
+              const formattedOutput = part.code_execution_result.output.trim();
+              if (formattedOutput) {
+                // Ulepszone formatowanie wyniku z code execution
+                responseChunks.push(
+                  `\n\n---\n**Wynik wykonania kodu:**\n\`\`\`\n${formattedOutput}\n\`\`\`\n`
+                );
+              }
+            }
+          }
+          aiResponse = responseChunks.join("");
+        }
+
+        if (!aiResponse.trim()) {
+          aiResponse = "Przepraszam, nie udało mi się wygenerować odpowiedzi.";
+        }
+      } else {
+        aiResponse = "Przepraszam, nie udało mi się wygenerować odpowiedzi.";
+      }
     } catch (apiError: any) {
+      // Dedykowana obsługa błędu timeout
+      if (apiError.code === "ECONNABORTED") {
+        console.error(
+          "❌ Błąd: Przekroczono czas oczekiwania na odpowiedź z API",
+          apiError.message
+        );
+        return res.status(504).json({
+          error:
+            "Serwer zbyt długo czekał na odpowiedź z Gemini API. Spróbuj ponownie później lub uprość zapytanie.",
+        });
+      }
+
       console.error(
         "❌ Błąd podczas komunikacji z Google Gemini API:",
         apiError.response?.data || apiError.message

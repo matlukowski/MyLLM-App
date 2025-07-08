@@ -27,8 +27,7 @@ export interface LLMModel {
   id: string;
   name: string;
   provider: string;
-  description: string;
-  maxTokens: number;
+  contextWindow: number;
   isPopular?: boolean;
 }
 
@@ -62,36 +61,25 @@ export interface ApiKey {
 }
 
 // Konfiguracja dostępnych modeli LLM
+// Konfiguracja dostępnych modeli LLM
 export const AVAILABLE_LLM_MODELS: LLMModel[] = [
   {
-    id: "gemini-flash-2.5",
-    name: "Gemini Flash 2.5",
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
     provider: "Google",
-    description: "Szybki i wydajny model Gemini Flash 2.5",
-    maxTokens: 1000000,
-    isPopular: true,
-  },
-  {
-    id: "gemini-2.5-flash-thinking",
-    name: "Gemini 2.5 Flash Thinking",
-    provider: "Google",
-    description: "Model zoptymalizowany pod kątem złożonych zadań",
-    maxTokens: 1500000,
-    isPopular: true,
+    contextWindow: 1000000,
   },
   {
     id: "gemini-2.5-pro",
     name: "Gemini 2.5 Pro",
     provider: "Google",
-    description: "Zaawansowany model Gemini 2.5 Pro",
-    maxTokens: 2000000,
-    isPopular: true,
+    contextWindow: 8000000,
   },
 ];
 
-// Funkcja pomocnicza do pobierania modelu LLM
-export const getLLMModel = (id: string): LLMModel | undefined => {
-  return AVAILABLE_LLM_MODELS.find((model) => model.id === id);
+// Funkcja pomocnicza do pobierania konfiguracji modelu
+export const getLLMModel = (modelId: string): LLMModel | undefined => {
+  return AVAILABLE_LLM_MODELS.find((model) => model.id === modelId);
 };
 
 // Funkcja pomocnicza do pobierania popularnych modeli
