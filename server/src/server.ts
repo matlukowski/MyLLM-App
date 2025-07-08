@@ -1,6 +1,4 @@
 import express, { Express, Request, Response } from "express";
-import http from "http";
-import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
 import axios from "axios";
@@ -9,13 +7,6 @@ import bcrypt from "bcrypt";
 // Inicjalizacje
 const prisma = new PrismaClient();
 const app: Express = express();
-const httpServer = http.createServer(app);
-const io = new SocketIOServer(httpServer, {
-  cors: {
-    origin: ["http://localhost:3000", "http://localhost:5173"],
-    methods: ["GET", "POST"],
-  },
-});
 
 // Konfiguracja serwisu RAG
 const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL || "http://localhost:5000";
@@ -210,99 +201,6 @@ app.get("/api/chats/:chatId/messages", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching messages:", error);
     res.status(500).json({ error: "Could not fetch messages" });
-  }
-});
-
-// Wyślij nową wiadomość do czatu
-app.post("/api/chats/:chatId/messages", async (req: Request, res: Response) => {
-  const { chatId } = req.params;
-  const { content, senderId } = req.body;
-
-  if (!content?.trim() || !senderId) {
-    return res.status(400).json({ error: "Content and senderId are required" });
-  }
-
-  try {
-    // Sprawdź czy czat istnieje i czy użytkownik ma do niego dostęp
-    const chat = await prisma.chat.findFirst({
-      where: {
-        id: chatId,
-        participants: {
-          some: { userId: senderId },
-        },
-      },
-    });
-
-    if (!chat) {
-      return res.status(404).json({ error: "Chat not found or access denied" });
-    }
-
-    // Utwórz nową wiadomość
-    const message = await prisma.message.create({
-      data: {
-        content: content.trim(),
-        senderId,
-        chatId,
-      },
-      include: {
-        sender: { select: { id: true, username: true } },
-      },
-    });
-
-    // Zaktualizuj czas ostatniej modyfikacji czatu
-    await prisma.chat.update({
-      where: { id: chatId },
-      data: { updatedAt: new Date() },
-    });
-
-    res.status(201).json(message);
-  } catch (error) {
-    console.error("Error sending message:", error);
-    res.status(500).json({ error: "Could not send message" });
-  }
-});
-
-// Utwórz nowy czat (lub znajdź istniejący) z innym użytkownikiem
-app.post("/api/chats", async (req: Request, res: Response) => {
-  const { recipientId } = req.body;
-  const currentUserId = "1"; // Jan Kowalski - główny użytkownik
-
-  if (!recipientId || currentUserId === recipientId) {
-    return res.status(400).json({ error: "Invalid recipient ID" });
-  }
-
-  try {
-    const existingChat = await prisma.chat.findFirst({
-      where: {
-        AND: [
-          { participants: { some: { userId: currentUserId } } },
-          { participants: { some: { userId: recipientId } } },
-        ],
-        participants: {
-          every: {
-            userId: {
-              in: [currentUserId, recipientId],
-            },
-          },
-        },
-      },
-    });
-
-    if (existingChat) {
-      return res.json(existingChat);
-    }
-
-    const newChat = await prisma.chat.create({
-      data: {
-        participants: {
-          create: [{ userId: currentUserId }, { userId: recipientId }],
-        },
-      },
-    });
-    res.status(201).json(newChat);
-  } catch (error) {
-    console.error("Error creating or finding chat:", error);
-    res.status(500).json({ error: "Could not process chat creation" });
   }
 });
 
@@ -584,52 +482,10 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
   }
 });
 
-// --- Logika Socket.IO ---
-
-io.on("connection", (socket) => {
-  console.log(`User connected: ${socket.id}`);
-
-  socket.on("joinChat", (chatId) => {
-    socket.join(chatId);
-    console.log(`User ${socket.id} joined chat room: ${chatId}`);
-  });
-
-  socket.on("leaveChat", (chatId) => {
-    socket.leave(chatId);
-    console.log(`User ${socket.id} left chat room: ${chatId}`);
-  });
-
-  socket.on("sendMessage", async (data) => {
-    const { chatId, content, senderId } = data;
-    if (!content?.trim() || !chatId || !senderId) return;
-
-    try {
-      const message = await prisma.message.create({
-        data: { content, chatId, senderId },
-        include: { sender: { select: { id: true, username: true } } },
-      });
-
-      await prisma.chat.update({
-        where: { id: chatId },
-        data: { updatedAt: new Date() },
-      });
-
-      io.to(chatId).emit("receiveMessage", message);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      socket.emit("messageError", { error: "Could not send message" });
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log(`User disconnected: ${socket.id}`);
-  });
-});
-
 // --- Uruchomienie serwera i obsługa zamykania ---
 
 const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`🚀 Server is running at http://localhost:${PORT}`);
 });
 
