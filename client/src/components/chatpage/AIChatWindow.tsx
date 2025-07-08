@@ -143,11 +143,27 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       console.log("📋 Ładuję historię czatu:", chatId);
       setLoading(true);
       try {
-        const response = await fetch(
-          `http://localhost:3001/api/chats/${chatId}/messages`
-        );
-        if (response.ok) {
-          const messagesData = await response.json();
+        const [messagesResponse, chatListResponse] = await Promise.all([
+          fetch(`http://localhost:3001/api/chats/${chatId}/messages`),
+          fetch(`http://localhost:3001/api/chats?userId=${user?.id}`),
+        ]);
+
+        let chatModelId = AVAILABLE_LLM_MODELS[0].id;
+
+        if (chatListResponse.ok) {
+          const chats = await chatListResponse.json();
+          const currentChat = chats.find((chat: any) => chat.id === chatId);
+          if (currentChat) {
+            setChatTitle(currentChat.title || "Rozmowa");
+            if (currentChat.modelId && currentChat.modelId !== "unknown") {
+              chatModelId = currentChat.modelId;
+              setSelectedModel(currentChat.modelId);
+            }
+          }
+        }
+
+        if (messagesResponse.ok) {
+          const messagesData = await messagesResponse.json();
 
           // Konwertuj wiadomości z backendu na format komponentu
           const formattedMessages: ChatMessage[] = messagesData.map(
@@ -156,7 +172,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
               content: msg.content,
               timestamp: new Date(msg.createdAt),
               role: msg.senderId === user?.id ? "user" : "assistant",
-              modelId: "gpt-4-turbo", // Domyślny model, można pobrać z metadanych czatu
+              modelId: chatModelId, // Użyj modelu z detali czatu
             })
           );
 
@@ -166,21 +182,17 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
             formattedMessages
           );
           setMessages(formattedMessages);
-
-          // Pobierz tytuł czatu
-          const chatResponse = await fetch(
-            `http://localhost:3001/api/chats?userId=${user?.id}`
+        } else {
+          const errorData = await messagesResponse.json();
+          throw new Error(
+            errorData.error || "Błąd podczas ładowania wiadomości"
           );
-          if (chatResponse.ok) {
-            const chats = await chatResponse.json();
-            const currentChat = chats.find((chat: any) => chat.id === chatId);
-            if (currentChat) {
-              setChatTitle(currentChat.title || "Rozmowa");
-            }
-          }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Błąd podczas ładowania historii czatu:", error);
+        setError(
+          `Nie udało się załadować historii czatu. ${error.message || ""}`
+        );
       } finally {
         setLoading(false);
       }
@@ -502,83 +514,21 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                       )}
                     </Flex>
 
-                    <VStack align="start" gap={2} flex={1} minW={0}>
-                      {/* Nazwa */}
-                      <HStack gap={2}>
+                    <VStack
+                      align="start"
+                      gap={1}
+                      flex={1}
+                      minW={0}
+                      role="group"
+                    >
+                      {/* Nazwa i przycisk kopiowania */}
+                      <HStack w="full" justify="space-between" align="center">
                         <Text fontWeight="600" color="gray.800" fontSize="sm">
                           {isUserMessage
                             ? user?.username || "Ty"
                             : messageModel?.name || "AI"}
                         </Text>
-                        {!isUserMessage && (
-                          <Badge
-                            size="xs"
-                            colorScheme="gray"
-                            variant="subtle"
-                            fontSize="10px"
-                          >
-                            {messageModel?.provider}
-                          </Badge>
-                        )}
-                      </HStack>
-
-                      {/* Treść wiadomości */}
-                      <Box
-                        bg={isUserMessage ? "blue.50" : "gray.50"}
-                        px={4}
-                        py={3}
-                        borderRadius="12px"
-                        border="1px solid"
-                        borderColor={isUserMessage ? "blue.100" : "gray.200"}
-                        position="relative"
-                        w="full"
-                        role="group"
-                        animation={
-                          !isUserMessage && message.isAnimating
-                            ? `${fadeIn} 0.8s ease-out`
-                            : undefined
-                        }
-                        onAnimationStart={() => {
-                          if (!isUserMessage && message.isAnimating) {
-                            console.log(
-                              "🎬 Animacja rozpoczęta dla:",
-                              message.id
-                            );
-                          }
-                        }}
-                        onAnimationEnd={() => {
-                          if (!isUserMessage && message.isAnimating) {
-                            console.log(
-                              "🎬 Animacja zakończona dla:",
-                              message.id
-                            );
-                          }
-                        }}
-                      >
-                        {isUserMessage ? (
-                          <Text
-                            fontSize="sm"
-                            whiteSpace="pre-wrap"
-                            lineHeight="1.6"
-                            wordBreak="break-word"
-                            color="gray.800"
-                          >
-                            {message.content}
-                          </Text>
-                        ) : (
-                          <MarkdownRenderer
-                            content={message.content}
-                            fontSize="sm"
-                            lineHeight="1.6"
-                            color="gray.800"
-                          />
-                        )}
-
-                        {/* Copy button */}
                         <Button
-                          position="absolute"
-                          top={2}
-                          right={2}
                           size="sm"
                           variant="ghost"
                           color="gray.500"
@@ -619,6 +569,57 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                             </Text>
                           </HStack>
                         </Button>
+                      </HStack>
+
+                      {/* Treść wiadomości */}
+                      <Box
+                        bg={isUserMessage ? "blue.50" : "gray.50"}
+                        px={4}
+                        py={3}
+                        borderRadius="12px"
+                        border="1px solid"
+                        borderColor={isUserMessage ? "blue.100" : "gray.200"}
+                        w="full"
+                        animation={
+                          !isUserMessage && message.isAnimating
+                            ? `${fadeIn} 0.8s ease-out`
+                            : undefined
+                        }
+                        onAnimationStart={() => {
+                          if (!isUserMessage && message.isAnimating) {
+                            console.log(
+                              "🎬 Animacja rozpoczęta dla:",
+                              message.id
+                            );
+                          }
+                        }}
+                        onAnimationEnd={() => {
+                          if (!isUserMessage && message.isAnimating) {
+                            console.log(
+                              "🎬 Animacja zakończona dla:",
+                              message.id
+                            );
+                          }
+                        }}
+                      >
+                        {isUserMessage ? (
+                          <Text
+                            fontSize="sm"
+                            whiteSpace="pre-wrap"
+                            lineHeight="1.6"
+                            wordBreak="break-word"
+                            color="gray.800"
+                          >
+                            {message.content}
+                          </Text>
+                        ) : (
+                          <MarkdownRenderer
+                            content={message.content}
+                            fontSize="sm"
+                            lineHeight="1.6"
+                            color="gray.800"
+                          />
+                        )}
                       </Box>
                     </VStack>
                   </HStack>

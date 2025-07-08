@@ -476,7 +476,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     });
 
     let aiResponse = "";
-    const geminiModelId = modelId.replace("2.5", "1.5"); // Konwersja na model obsługiwany przez API
+    const geminiModelId = modelId; // Użyj bezpośrednio ID modelu z frontendu
     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelId}:generateContent?key=${apiKey}`;
 
     try {
