@@ -36,6 +36,20 @@ const API_PROVIDERS = [
     placeholder: "AIza...",
     helpText: "Znajdź swój klucz API na console.cloud.google.com",
   },
+  {
+    id: "openai",
+    name: "OpenAI",
+    description: "Klucz API dla modeli GPT",
+    placeholder: "sk-...",
+    helpText: "Znajdź swój klucz API na platform.openai.com/api-keys",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    description: "Klucz API dla modeli Claude",
+    placeholder: "sk-ant-...",
+    helpText: "Znajdź swój klucz API na console.anthropic.com",
+  },
 ];
 
 const ApiKeysModal: React.FC<ApiKeysModalProps> = ({ isOpen, onClose }) => {
