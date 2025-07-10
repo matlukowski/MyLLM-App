@@ -226,12 +226,45 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       console.log("💬 Dodaję wiadomość użytkownika:", userMessage.id);
       setMessages((prev) => [...prev, userMessage]);
 
-      // 2. Pobierz klucz API Google z localStorage
+      // 2. Pobierz odpowiedni klucz API w zależności od wybranego modelu
       const savedKeysRaw = localStorage.getItem("apiKeys");
       const savedKeys = savedKeysRaw ? JSON.parse(savedKeysRaw) : [];
-      const googleApiKey = savedKeys.find(
-        (key: any) => key.provider === "google"
-      )?.key;
+
+      // Określ dostawcę na podstawie wybranego modelu
+      let requiredProvider = "";
+      let apiKey = "";
+
+      if (currentModel?.provider === "Google") {
+        requiredProvider = "google";
+        apiKey = savedKeys.find((key: any) => key.provider === "google")?.key;
+      } else if (currentModel?.provider === "OpenAI") {
+        requiredProvider = "openai";
+        apiKey = savedKeys.find((key: any) => key.provider === "openai")?.key;
+      } else if (currentModel?.provider === "Anthropic") {
+        requiredProvider = "anthropic";
+        apiKey = savedKeys.find(
+          (key: any) => key.provider === "anthropic"
+        )?.key;
+      }
+
+      // Sprawdź czy klucz API jest dostępny
+      if (!apiKey) {
+        const providerName = currentModel?.provider || "tego dostawcy";
+        const configHelp =
+          requiredProvider === "google"
+            ? "console.cloud.google.com"
+            : requiredProvider === "openai"
+            ? "platform.openai.com/api-keys"
+            : requiredProvider === "anthropic"
+            ? "console.anthropic.com"
+            : "odpowiedniej stronie dostawcy";
+
+        setError(
+          `Brak klucza API dla ${providerName}. Aby używać modeli ${currentModel?.name}, musisz skonfigurować klucz API w modal "Klucze API". Znajdź swój klucz na ${configHelp}.`
+        );
+        setIsSending(false);
+        return;
+      }
 
       // 3. Przygotuj historię czatu (bez bieżącej wiadomości)
       const chatHistory = messages.slice(-10).map((msg) => ({
@@ -251,15 +284,23 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           userMessage: userMessageContent,
           chatHistory,
           chatId: isNewChat ? null : chatId,
-          apiKey: googleApiKey, // Prześlij klucz API
+          apiKey: apiKey, // Prześlij odpowiedni klucz API
+          provider: requiredProvider, // Prześlij informację o dostawcy
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(
-          errorData.error || "Wystąpił błąd podczas komunikacji z AI"
-        );
+        let errorMessage =
+          errorData.error || "Wystąpił błąd podczas komunikacji z AI";
+
+        // Specjalne obsługiwanie błędów kluczy API
+        if (errorMessage.includes("Brak klucza API")) {
+          const providerName = currentModel?.provider || "tego dostawcy";
+          errorMessage = `${errorMessage} Sprawdź klucze API w ustawieniach dla ${providerName}.`;
+        }
+
+        throw new Error(errorMessage);
       }
 
       type AIChatResponse = {

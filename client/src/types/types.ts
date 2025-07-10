@@ -75,6 +75,18 @@ export const AVAILABLE_LLM_MODELS: LLMModel[] = [
     provider: "Google",
     contextWindow: 8000000,
   },
+  {
+    id: "claude-sonnet-4-20250514",
+    name: "Claude 4 Sonnet",
+    provider: "Anthropic",
+    contextWindow: 1000000,
+  },
+  {
+    id: "gpt-4.1",
+    name: "GPT-4.1",
+    provider: "OpenAI",
+    contextWindow: 1000000,
+  },
 ];
 
 // Funkcja pomocnicza do pobierania konfiguracji modelu

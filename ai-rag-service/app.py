@@ -27,6 +27,19 @@ import google.generativeai as genai
 import threading
 import time
 
+# Import dla OpenAI i Anthropic
+try:
+    import openai
+except ImportError:
+    openai = None
+    print("OpenAI library nie jest zainstalowane")
+
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
+    print("Anthropic library nie jest zainstalowane")
+
 load_dotenv()
 
 # Inicjalizacja Flask
@@ -39,8 +52,12 @@ CHROMA_DB_PATH = os.getenv('CHROMA_DB_PATH', './chroma_db')
 FLASK_PORT = int(os.getenv('FLASK_PORT', 5000))
 
 # Inicjalizacja Google Gemini API (szybka operacja)
-genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
+    google_model = genai.GenerativeModel('gemini-1.5-flash')
+else:
+    google_model = None
+    print("Google API key nie został znaleziony w zmiennych środowiskowych")
 
 # Globalne zmienne dla lazy loading
 chroma_client = None
@@ -167,19 +184,57 @@ def retrieve_memory_chunks(user_id: str, ai_char_id: str, query_text: str, n_res
         print(f"Błąd podczas pobierania pamięci: {e}")
         return []
 
-def get_gemini_response(system_prompt: str, chat_history: List[Dict], user_message: str) -> str:
+def get_ai_response(system_prompt: str, chat_history: List[Dict], user_message: str, provider: str, api_key: str, model_id: str) -> str:
     """
-    Generuje odpowiedź przy użyciu Google Gemini API
+    Generuje odpowiedź przy użyciu odpowiedniego dostawcy AI
     
     Args:
         system_prompt: Prompt systemowy
         chat_history: Historia czatu (krótkoterminowa pamięć)
         user_message: Wiadomość użytkownika
+        provider: Dostawca AI (google, openai, anthropic)
+        api_key: Klucz API dla dostawcy
+        model_id: ID modelu do użycia
         
     Returns:
         Odpowiedź AI jako string
     """
     try:
+        if provider == "google":
+            return get_gemini_response(system_prompt, chat_history, user_message, api_key, model_id)
+        elif provider == "openai":
+            return get_openai_response(system_prompt, chat_history, user_message, api_key, model_id)
+        elif provider == "anthropic":
+            return get_anthropic_response(system_prompt, chat_history, user_message, api_key, model_id)
+        else:
+            return f"Nieobsługiwany dostawca AI: {provider}"
+    except Exception as e:
+        print(f"Błąd podczas generowania odpowiedzi {provider}: {e}")
+        return f"Przepraszam, wystąpił błąd podczas generowania odpowiedzi ({provider})."
+
+def get_gemini_response(system_prompt: str, chat_history: List[Dict], user_message: str, api_key: str = None, model_id: str = None) -> str:
+    """
+    Generuje odpowiedź przy użyciu Google Gemini API
+    """
+    try:
+        # Jeśli przekazano klucz API, użyj go
+        if api_key:
+            genai.configure(api_key=api_key)
+            # Mapowanie modeli Gemini
+            gemini_models = {
+                "gemini-2.5-flash": "gemini-1.5-flash",
+                "gemini-2.5-pro": "gemini-1.5-pro",
+                "gemini-1.5-flash": "gemini-1.5-flash",
+                "gemini-1.5-pro": "gemini-1.5-pro"
+            }
+            model_name = gemini_models.get(model_id, "gemini-1.5-flash")
+            model = genai.GenerativeModel(model_name)
+        else:
+            model = google_model
+            
+        if not model:
+            return "Google Gemini API nie jest dostępny - brak klucza API."
+        
         # Budowanie listy wiadomości
         messages = []
         
@@ -208,7 +263,104 @@ def get_gemini_response(system_prompt: str, chat_history: List[Dict], user_messa
         
     except Exception as e:
         print(f"Błąd podczas generowania odpowiedzi Gemini: {e}")
-        return "Przepraszam, wystąpił błąd podczas generowania odpowiedzi."
+        return "Przepraszam, wystąpił błąd podczas generowania odpowiedzi z Google Gemini."
+
+def get_openai_response(system_prompt: str, chat_history: List[Dict], user_message: str, api_key: str, model_id: str) -> str:
+    """
+    Generuje odpowiedź przy użyciu OpenAI API
+    """
+    try:
+        if not openai:
+            return "OpenAI library nie jest zainstalowana. Zainstaluj: pip install openai"
+        
+        # Inicjalizuj klienta OpenAI z przekazanym kluczem
+        client = openai.OpenAI(api_key=api_key)
+        
+        # Budowanie listy wiadomości dla OpenAI
+        messages = [
+            {"role": "system", "content": system_prompt}
+        ]
+        
+        # Dodaj historię czatu
+        for msg in chat_history:
+            role = msg.get('role', 'user')
+            if role == 'model':  # Gemini używa 'model', OpenAI używa 'assistant'
+                role = 'assistant'
+            content = msg.get('content', '')
+            messages.append({"role": role, "content": content})
+        
+        # Dodaj aktualną wiadomość użytkownika
+        messages.append({"role": "user", "content": user_message})
+        
+        # Mapowanie ID modelu na nazwę modelu OpenAI
+        model_mapping = {
+            "gpt-4.1": "gpt-4",
+            "gpt-4": "gpt-4",
+            "gpt-3.5-turbo": "gpt-3.5-turbo"
+        }
+        openai_model = model_mapping.get(model_id, "gpt-4")  # Domyślnie gpt-4
+        
+        # Generuj odpowiedź
+        response = client.chat.completions.create(
+            model=openai_model,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=2000
+        )
+        
+        return response.choices[0].message.content or "Przepraszam, nie mogę wygenerować odpowiedzi."
+        
+    except Exception as e:
+        print(f"Błąd podczas generowania odpowiedzi OpenAI: {e}")
+        return f"Przepraszam, wystąpił błąd podczas generowania odpowiedzi z OpenAI: {str(e)}"
+
+def get_anthropic_response(system_prompt: str, chat_history: List[Dict], user_message: str, api_key: str, model_id: str) -> str:
+    """
+    Generuje odpowiedź przy użyciu Anthropic Claude API
+    """
+    try:
+        if not anthropic:
+            return "Anthropic library nie jest zainstalowana. Zainstaluj: pip install anthropic"
+        
+        # Inicjalizuj klienta Anthropic z przekazanym kluczem
+        client = anthropic.Anthropic(api_key=api_key)
+        
+        # Budowanie listy wiadomości dla Claude
+        messages = []
+        
+        # Dodaj historię czatu
+        for msg in chat_history:
+            role = msg.get('role', 'user')
+            if role == 'model':  # Gemini używa 'model', Claude używa 'assistant'
+                role = 'assistant'
+            content = msg.get('content', '')
+            messages.append({"role": role, "content": content})
+        
+        # Dodaj aktualną wiadomość użytkownika
+        messages.append({"role": "user", "content": user_message})
+        
+        # Mapowanie ID modelu na nazwę modelu Claude
+        model_mapping = {
+            "claude-sonnet-4-20250514": "claude-3-5-sonnet-20241022",
+            "claude-3-5-sonnet": "claude-3-5-sonnet-20241022",
+            "claude-3-haiku": "claude-3-haiku-20240307"
+        }
+        claude_model = model_mapping.get(model_id, "claude-3-5-sonnet-20241022")  # Domyślnie claude sonnet
+        
+        # Generuj odpowiedź
+        response = client.messages.create(
+            model=claude_model,
+            system=system_prompt,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=2000
+        )
+        
+        return response.content[0].text if response.content else "Przepraszam, nie mogę wygenerować odpowiedzi."
+        
+    except Exception as e:
+        print(f"Błąd podczas generowania odpowiedzi Claude: {e}")
+        return f"Przepraszam, wystąpił błąd podczas generowania odpowiedzi z Claude: {str(e)}"
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -224,10 +376,15 @@ def chat():
         user_message = data.get('userMessage')
         chat_history = data.get('chatHistory', [])
         character_prompt = data.get('characterPrompt', '')
+        api_key = data.get('apiKey')
+        provider = data.get('provider', 'google')  # Domyślnie Google
         
         # Walidacja danych
         if not all([user_id, ai_char_id, user_message]):
             return jsonify({'error': 'Brakuje wymaganych danych'}), 400
+            
+        if not api_key:
+            return jsonify({'error': f'Brak klucza API dla dostawcy {provider}'}), 400
         
         # Pobierz odpowiednie wspomnienia z pamięci długoterminowej
         relevant_memories = retrieve_memory_chunks(
@@ -244,11 +401,14 @@ def chat():
         
         final_system_prompt = character_prompt + memory_context
         
-        # Generuj odpowiedź AI
-        ai_response = get_gemini_response(
+        # Generuj odpowiedź AI przy użyciu odpowiedniego dostawcy
+        ai_response = get_ai_response(
             system_prompt=final_system_prompt,
             chat_history=chat_history,
-            user_message=user_message
+            user_message=user_message,
+            provider=provider,
+            api_key=api_key,
+            model_id=ai_char_id  # Używamy ai_char_id jako model_id
         )
         
         # Zapisz wiadomość użytkownika i odpowiedź AI do pamięci długoterminowej
@@ -272,7 +432,8 @@ def chat():
         
         return jsonify({
             'response': ai_response,
-            'memories_used': len(relevant_memories)
+            'memories_used': len(relevant_memories),
+            'provider': provider
         })
         
     except Exception as e:

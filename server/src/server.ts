@@ -303,8 +303,15 @@ app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
 
 // Zaktualizowany endpoint do czatu z AI
 app.post("/api/ai/chat", async (req: Request, res: Response) => {
-  const { userId, modelId, userMessage, chatHistory, chatId, apiKey } =
-    req.body;
+  const {
+    userId,
+    modelId,
+    userMessage,
+    chatHistory,
+    chatId,
+    apiKey,
+    provider,
+  } = req.body;
 
   if (!userId || !modelId || !userMessage) {
     return res.status(400).json({
@@ -312,8 +319,14 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     });
   }
 
-  // Usunięto walidację klucza API Google, ponieważ obsłuży to serwis RAG
-  // if (!apiKey) { ... }
+  // Walidacja klucza API w zależności od dostawcy
+  if (!apiKey) {
+    return res.status(400).json({
+      error: `Brak klucza API dla dostawcy ${
+        provider || "nieznany"
+      }. Proszę skonfigurować klucz API.`,
+    });
+  }
 
   try {
     let currentChatId = chatId;
@@ -359,6 +372,8 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       userMessage,
       chatHistory: chatHistory || [],
       characterPrompt: "Jesteś pomocnym asystentem AI.", // Domyślny prompt
+      apiKey: apiKey, // Przekaż klucz API
+      provider: provider, // Przekaż informację o dostawcy
     };
 
     let aiResponse = "";
