@@ -266,13 +266,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         return;
       }
 
-      // 3. Przygotuj historię czatu (bez bieżącej wiadomości)
-      const chatHistory = messages.slice(-10).map((msg) => ({
-        role: msg.role === "user" ? "user" : "model",
-        content: msg.content,
-      }));
-
-      // 4. Wyślij żądanie do backendu AI
+      // 3. Wyślij żądanie do backendu AI
       const response = await fetch("http://localhost:3001/api/ai/chat", {
         method: "POST",
         headers: {
@@ -282,7 +276,6 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           userId: user.id,
           modelId: selectedModel,
           userMessage: userMessageContent,
-          chatHistory,
           chatId: isNewChat ? null : chatId,
           apiKey: apiKey, // Prześlij odpowiedni klucz API
           provider: requiredProvider, // Prześlij informację o dostawcy

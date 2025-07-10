@@ -26,7 +26,7 @@ interface ChatPageProps {
 
 const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [isNewChatMode, setIsNewChatMode] = useState(false);
+  const [isNewChatMode, setIsNewChatMode] = useState(true); // Domyślnie true, aby pokazać ekran powitalny
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
   const { user } = useAuth();
@@ -55,13 +55,15 @@ const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
     return () => window.removeEventListener("resize", handleResize);
   }, [isMobile]);
 
-  // Callback dla zamknięcia sidebara po wybraniu czatu na mobile
-  const handleChatSelect = () => {
+  // Callback dla wybrania czatu lub usunięcia aktywnego czatu
+  const handleChatSelect = (chatId: string | null) => {
+    setActiveChatId(chatId);
+    setIsNewChatMode(false); // Zawsze resetuj tryb nowego czatu po wyborze istniejącego
+
     // Zamknij sidebar tylko na mobile (szerokość < 768px)
     if (isMobile) {
       setIsSidebarOpen(false);
     }
-    setIsNewChatMode(false);
   };
 
   // Callback tylko dla zamykania sidebara na mobile (bez wpływu na isNewChatMode)
@@ -75,12 +77,16 @@ const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
   const handleNewChat = () => {
     setActiveChatId(null);
     setIsNewChatMode(true);
+    // Zamknij sidebar na mobile
+    if (isMobile) {
+      setIsSidebarOpen(false);
+    }
   };
 
   // Callback do odświeżania listy czatów po utworzeniu nowego
   const handleChatCreated = async (newChatId: string) => {
     setActiveChatId(newChatId);
-    setIsNewChatMode(false);
+    setIsNewChatMode(false); // Ustaw na false, bo czat już istnieje
     // Odśwież listę czatów w sidebarze
     if (sidebarRef.current) {
       await sidebarRef.current.refreshChats();
@@ -142,8 +148,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
         <SidebarContent
           ref={sidebarRef}
           activeChatId={activeChatId}
-          setActiveChatId={setActiveChatId}
-          onChatSelect={handleChatSelect}
+          onChatSelect={handleChatSelect} // Przekaż handleChatSelect bezpośrednio
           onNewChat={handleNewChat}
           onCloseSidebar={handleCloseSidebar}
           onApiKeysOpen={onApiKeysOpen}
@@ -178,7 +183,7 @@ const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
         {activeChatId || isNewChatMode ? (
           <AIChatWindow
             chatId={activeChatId}
-            isNewChat={isNewChatMode}
+            isNewChat={isNewChatMode || !activeChatId} // isNewChat jest true jeśli nie ma aktywnego chatId
             onChatCreated={handleChatCreated}
           />
         ) : (

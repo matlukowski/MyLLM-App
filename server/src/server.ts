@@ -1,15 +1,11 @@
 import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
-import axios from "axios";
 import bcrypt from "bcrypt";
 
 // Inicjalizacje
 const prisma = new PrismaClient();
 const app: Express = express();
-
-// Konfiguracja serwisu RAG
-const RAG_SERVICE_URL = process.env.RAG_SERVICE_URL || "http://localhost:5000";
 
 // Middlewares
 app.use(
@@ -301,17 +297,110 @@ app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
   }
 });
 
-// Zaktualizowany endpoint do czatu z AI
+// Funkcja do generowania prostej odpowiedzi AI bez pamięci wektorowej
+async function generateSimpleAIResponse(
+  userMessage: string,
+  provider: string,
+  apiKey: string,
+  modelId: string
+): Promise<string> {
+  const basicPrompt = `Jesteś pomocnym asystentem AI. Odpowiedz na pytanie użytkownika w sposób zwięzły i pomocny.`;
+
+  if (provider === "google") {
+    try {
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const genAI = new GoogleGenerativeAI(apiKey);
+
+      // Mapowanie modeli Gemini
+      const geminiModels = {
+        "gemini-2.5-flash": "gemini-1.5-flash",
+        "gemini-2.5-pro": "gemini-1.5-pro",
+        "gemini-1.5-flash": "gemini-1.5-flash",
+        "gemini-1.5-pro": "gemini-1.5-pro",
+      };
+      const modelName =
+        geminiModels[modelId as keyof typeof geminiModels] ||
+        "gemini-1.5-flash";
+
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: basicPrompt,
+      });
+
+      const result = await model.generateContent(userMessage);
+      return (
+        result.response.text() ||
+        "Przepraszam, nie mogę wygenerować odpowiedzi."
+      );
+    } catch (error) {
+      throw new Error(`Błąd Google Gemini: ${error}`);
+    }
+  } else if (provider === "openai") {
+    try {
+      const { OpenAI } = await import("openai");
+      const openai = new OpenAI({ apiKey });
+
+      const modelMapping = {
+        "gpt-4.1": "gpt-4",
+        "gpt-4": "gpt-4",
+        "gpt-3.5-turbo": "gpt-3.5-turbo",
+      };
+      const openaiModel =
+        modelMapping[modelId as keyof typeof modelMapping] || "gpt-4";
+
+      const response = await openai.chat.completions.create({
+        model: openaiModel,
+        messages: [
+          { role: "system", content: basicPrompt },
+          { role: "user", content: userMessage },
+        ],
+        temperature: 0.7,
+        max_tokens: 2000,
+      });
+
+      return (
+        response.choices[0]?.message?.content ||
+        "Przepraszam, nie mogę wygenerować odpowiedzi."
+      );
+    } catch (error) {
+      throw new Error(`Błąd OpenAI: ${error}`);
+    }
+  } else if (provider === "anthropic") {
+    try {
+      const { Anthropic } = await import("@anthropic-ai/sdk");
+      const anthropic = new Anthropic({ apiKey });
+
+      const modelMapping = {
+        "claude-3.5-sonnet": "claude-3-5-sonnet-20241022",
+        "claude-3.5-haiku": "claude-3-5-haiku-20241022",
+      };
+      const claudeModel =
+        modelMapping[modelId as keyof typeof modelMapping] ||
+        "claude-3-5-sonnet-20241022";
+
+      const response = await anthropic.messages.create({
+        model: claudeModel,
+        max_tokens: 2000,
+        system: basicPrompt,
+        messages: [{ role: "user", content: userMessage }],
+      });
+
+      const content = response.content[0];
+      if (content.type === "text") {
+        return content.text;
+      }
+      return "Przepraszam, nie mogę wygenerować odpowiedzi.";
+    } catch (error) {
+      throw new Error(`Błąd Anthropic: ${error}`);
+    }
+  } else {
+    throw new Error(`Nieobsługiwany dostawca: ${provider}`);
+  }
+}
+
+// Prosty endpoint do czatu z AI - bez pamięci wektorowej
 app.post("/api/ai/chat", async (req: Request, res: Response) => {
-  const {
-    userId,
-    modelId,
-    userMessage,
-    chatHistory,
-    chatId,
-    apiKey,
-    provider,
-  } = req.body;
+  const { userId, modelId, userMessage, chatId, apiKey, provider } = req.body;
 
   if (!userId || !modelId || !userMessage) {
     return res.status(400).json({
@@ -365,61 +454,35 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       },
     });
 
-    // Przygotuj payload dla serwisu RAG
-    const ragPayload = {
-      userId,
-      aiCharId: modelId, // Używamy modelId jako identyfikatora postaci AI
-      userMessage,
-      chatHistory: chatHistory || [],
-      characterPrompt: "Jesteś pomocnym asystentem AI.", // Domyślny prompt
-      apiKey: apiKey, // Przekaż klucz API
-      provider: provider, // Przekaż informację o dostawcy
-    };
-
+    // Generuj prostą odpowiedź AI bez pamięci wektorowej
     let aiResponse = "";
 
     try {
-      console.log("🤖 Przekazywanie zapytania do serwisu RAG:", {
-        url: `${RAG_SERVICE_URL}/chat`,
+      console.log("🤖 Generowanie odpowiedzi AI:", {
         chatId: currentChatId,
+        provider: provider,
+        modelId: modelId,
       });
 
-      const ragResponse = await axios.post(
-        `${RAG_SERVICE_URL}/chat`,
-        ragPayload,
-        {
-          timeout: 600000, // 10 minut timeoutu
-        }
+      // Prosta implementacja - każdy czat jest świeży bez pamięci poprzednich rozmów
+      aiResponse = await generateSimpleAIResponse(
+        userMessage,
+        provider,
+        apiKey,
+        modelId
       );
-
-      aiResponse = ragResponse.data.response;
 
       if (!aiResponse || !aiResponse.trim()) {
-        aiResponse =
-          "Przepraszam, nie udało mi się wygenerować odpowiedzi z serwisu RAG.";
+        aiResponse = "Przepraszam, nie udało mi się wygenerować odpowiedzi.";
       }
-    } catch (ragError: any) {
+    } catch (aiError: any) {
       console.error(
-        "❌ Błąd podczas komunikacji z serwisem RAG:",
-        ragError.response?.data || ragError.message
+        "❌ Błąd podczas generowania odpowiedzi AI:",
+        aiError.message
       );
 
-      if (ragError.code === "ECONNABORTED") {
-        return res.status(504).json({
-          error:
-            "Serwer zbyt długo czekał na odpowiedź z serwisu RAG. Spróbuj ponownie.",
-        });
-      }
-
-      if (ragError.code === "ECONNREFUSED") {
-        return res.status(503).json({
-          error:
-            "Serwis RAG jest niedostępny. Upewnij się, że jest uruchomiony.",
-        });
-      }
-
       return res.status(500).json({
-        error: "Błąd komunikacji z serwisem RAG. Sprawdź logi serwisu.",
+        error: "Błąd podczas generowania odpowiedzi AI. Sprawdź klucz API.",
       });
     }
 
@@ -438,9 +501,10 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       data: { updatedAt: new Date() },
     });
 
-    console.log("✅ Odpowiedź AI z Gemini wygenerowana:", {
+    console.log("✅ Odpowiedź AI wygenerowana:", {
       responseLength: aiResponse.length,
       chatId: currentChatId,
+      provider: provider,
     });
 
     res.json({

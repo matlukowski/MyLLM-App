@@ -24,19 +24,14 @@ dist-ssr
 *.sln
 *.sw?
 
-# AI RAG Service
-/ai-rag-service/
-# Python virtual environment
-/ai-rag-service/venv/
-# PyInstaller generated files (if you ever build an executable)
-/ai-rag-service/build/
-/ai-rag-service/dist/
-# Python bytecode
-/ai-rag-service/__pycache__/
-# Environment variables file
-/ai-rag-service/.env
-# ChromaDB local data directory
-/ai-rag-service/chroma_db/
+# AI RAG Service - już nie używane
+# /ai-rag-service/
+# /ai-rag-service/venv/
+# /ai-rag-service/build/
+# /ai-rag-service/dist/
+# /ai-rag-service/__pycache__/
+# /ai-rag-service/.env
+# /ai-rag-service/chroma_db/
 
 # --- Standardowe ignorowane pliki dla projektów Node.js/React (jeśli ich jeszcze nie masz) ---
 # node_modules

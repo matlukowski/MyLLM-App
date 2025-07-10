@@ -13,12 +13,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.56.0",
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.8.2",
     "@types/bcrypt": "^5.0.2",
-    "axios": "^1.10.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "openai": "^5.8.3",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1"
   },

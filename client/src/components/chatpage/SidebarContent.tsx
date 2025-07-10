@@ -29,8 +29,7 @@ import { toast } from "react-toastify";
 
 interface SidebarContentProps {
   activeChatId: string | null;
-  setActiveChatId: (chatId: string | null) => void;
-  onChatSelect?: () => void; // Callback wywoływany po wyborze czatu (dla mobile drawer)
+  onChatSelect: (chatId: string | null) => void; // Zmieniono typ, aby akceptował chatId
   onNewChat?: () => void; // Callback wywoływany po kliknięciu "Nowa rozmowa"
   onCloseSidebar?: () => void; // Callback tylko dla zamykania sidebara na mobile
   onApiKeysOpen?: () => void; // Callback do otwierania modalu kluczy API
@@ -45,8 +44,7 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
   (
     {
       activeChatId,
-      setActiveChatId,
-      onChatSelect,
+      onChatSelect, // Usunięto setActiveChatId, dodano onChatSelect
       onNewChat,
       onCloseSidebar,
       onApiKeysOpen,
@@ -96,14 +94,12 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
     };
 
     const handleChatSelect = (chatId: string) => {
-      setActiveChatId(chatId);
-      onChatSelect?.(); // Wywołaj callback (zamknij drawer na mobile)
+      onChatSelect(chatId); // Użyj callbacka zamiast bezpośredniego ustawiania stanu
     };
 
     const handleNewChat = () => {
-      setActiveChatId(null);
-      onNewChat?.(); // Wywołaj callback
-      onCloseSidebar?.(); // Zamknij drawer na mobile (bez wpływu na isNewChatMode)
+      onNewChat?.();
+      onCloseSidebar?.();
     };
 
     // Funkcja do odświeżania listy czatów (można wywołać po utworzeniu nowego czatu)
@@ -155,7 +151,7 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
 
         // Jeśli usuwany czat jest aktywny, przejdź do nowego czatu
         if (activeChatId === chatToDelete.id) {
-          setActiveChatId(null);
+          onChatSelect(null); // Użyj callbacka, aby zresetować stan w komponencie nadrzędnym
         }
 
         toast.success("Rozmowa została usunięta");

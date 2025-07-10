@@ -52,8 +52,8 @@ Thumbs.db
 # Prisma
 prisma/migrations/
 
-# ChromaDB (jeśli nie chcesz trzymać lokalnej bazy w repo)
-ai-rag-service/chroma_db/
+# ChromaDB - już nie używane
+# ai-rag-service/chroma_db/
 
 # Docker
 *.local

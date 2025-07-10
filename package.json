@@ -6,7 +6,7 @@
     "server"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=client\" \"npm run dev --workspace=server\" \"cd ai-rag-service && venv\\\\Scripts\\\\python.exe start.py\""
+    "dev": "concurrently \"npm run dev --workspace=client\" \"npm run dev --workspace=server\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
