@@ -312,21 +312,12 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     });
   }
 
-  if (!apiKey) {
-    return res.status(401).json({
-      error:
-        "Klucz API od Google jest wymagany. Dodaj go w ustawieniach kluczy API.",
-    });
-  }
+  // Usunięto walidację klucza API Google, ponieważ obsłuży to serwis RAG
+  // if (!apiKey) { ... }
 
   try {
     let currentChatId = chatId;
     let chatTitle = "";
-
-    // Konfiguracja specyficzna dla modelu
-    const isProModel = modelId === "gemini-2.5-pro";
-    const timeout = isProModel ? 600000 : 120000; // 10 minut dla Pro, 2 minuty dla Flash
-    const maxOutputTokens = isProModel ? 32768 : 8192; // 32k dla Pro, 8k dla Flash
 
     // Jeśli nie ma chatId, utwórz nowy czat
     if (!currentChatId) {
@@ -361,90 +352,59 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       },
     });
 
-    // Mapowanie historii czatu do formatu Google Gemini
-    const contents = [
-      ...(chatHistory || []).map((msg: any) => ({
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content }],
-      })),
-      {
-        role: "user",
-        parts: [{ text: userMessage }],
-      },
-    ];
-
-    const payload: any = {
-      contents,
-      generationConfig: {
-        maxOutputTokens,
-      },
+    // Przygotuj payload dla serwisu RAG
+    const ragPayload = {
+      userId,
+      aiCharId: modelId, // Używamy modelId jako identyfikatora postaci AI
+      userMessage,
+      chatHistory: chatHistory || [],
+      characterPrompt: "Jesteś pomocnym asystentem AI.", // Domyślny prompt
     };
 
-    console.log("🤖 Generowanie odpowiedzi AI z Google Gemini:", {
-      modelId,
-      chatId: currentChatId,
-    });
-
     let aiResponse = "";
-    const geminiModelId = modelId;
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelId}:generateContent?key=${apiKey}`;
 
     try {
-      const geminiResponse = await axios.post(geminiApiUrl, payload, {
-        headers: { "Content-Type": "application/json" },
-        timeout,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
+      console.log("🤖 Przekazywanie zapytania do serwisu RAG:", {
+        url: `${RAG_SERVICE_URL}/chat`,
+        chatId: currentChatId,
       });
 
-      const candidate = geminiResponse.data.candidates?.[0];
-
-      if (candidate) {
-        const parts = candidate.content?.parts;
-        if (parts && Array.isArray(parts)) {
-          const responseChunks: string[] = [];
-          for (const part of parts) {
-            if (part.text) {
-              responseChunks.push(part.text);
-            } else if (part.code_execution_result?.output) {
-              const formattedOutput = part.code_execution_result.output.trim();
-              if (formattedOutput) {
-                // Ulepszone formatowanie wyniku z code execution
-                responseChunks.push(
-                  `\n\n---\n**Wynik wykonania kodu:**\n\`\`\`\n${formattedOutput}\n\`\`\`\n`
-                );
-              }
-            }
-          }
-          aiResponse = responseChunks.join("");
+      const ragResponse = await axios.post(
+        `${RAG_SERVICE_URL}/chat`,
+        ragPayload,
+        {
+          timeout: 600000, // 10 minut timeoutu
         }
+      );
 
-        if (!aiResponse.trim()) {
-          aiResponse = "Przepraszam, nie udało mi się wygenerować odpowiedzi.";
-        }
-      } else {
-        aiResponse = "Przepraszam, nie udało mi się wygenerować odpowiedzi.";
+      aiResponse = ragResponse.data.response;
+
+      if (!aiResponse || !aiResponse.trim()) {
+        aiResponse =
+          "Przepraszam, nie udało mi się wygenerować odpowiedzi z serwisu RAG.";
       }
-    } catch (apiError: any) {
-      // Dedykowana obsługa błędu timeout
-      if (apiError.code === "ECONNABORTED") {
-        console.error(
-          "❌ Błąd: Przekroczono czas oczekiwania na odpowiedź z API",
-          apiError.message
-        );
+    } catch (ragError: any) {
+      console.error(
+        "❌ Błąd podczas komunikacji z serwisem RAG:",
+        ragError.response?.data || ragError.message
+      );
+
+      if (ragError.code === "ECONNABORTED") {
         return res.status(504).json({
           error:
-            "Serwer zbyt długo czekał na odpowiedź z Gemini API. Spróbuj ponownie później lub uprość zapytanie.",
+            "Serwer zbyt długo czekał na odpowiedź z serwisu RAG. Spróbuj ponownie.",
         });
       }
 
-      console.error(
-        "❌ Błąd podczas komunikacji z Google Gemini API:",
-        apiError.response?.data || apiError.message
-      );
+      if (ragError.code === "ECONNREFUSED") {
+        return res.status(503).json({
+          error:
+            "Serwis RAG jest niedostępny. Upewnij się, że jest uruchomiony.",
+        });
+      }
+
       return res.status(500).json({
-        error:
-          "Błąd komunikacji z Google Gemini API. Sprawdź swój klucz API i spróbuj ponownie.",
+        error: "Błąd komunikacji z serwisem RAG. Sprawdź logi serwisu.",
       });
     }
 
