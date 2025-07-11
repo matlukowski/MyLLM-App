@@ -14,6 +14,8 @@ import {
   Icon,
   Badge,
   IconButton,
+  Image,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
 
@@ -34,6 +36,8 @@ import {
   HiOutlineUser,
   HiOutlineClipboardDocument,
   HiOutlineCheck,
+  HiOutlinePaperClip,
+  HiOutlineXMark,
 } from "react-icons/hi2";
 import { FaBrain } from "react-icons/fa";
 import {
@@ -42,6 +46,7 @@ import {
   type LLMModel,
 } from "../../types/types";
 import MarkdownRenderer from "../ui/MarkdownRenderer";
+import { useFileUpload, type FileUploadData } from "../../hooks/useFileUpload";
 
 interface ChatMessage {
   id: string;
@@ -77,6 +82,11 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Hook do obsługi plików
+  const { files, isUploading, addFiles, removeFile, clearFiles, uploadFiles } =
+    useFileUpload();
 
   // Pobierz konfigurację wybranego modelu
   const currentModel = getLLMModel(selectedModel);
@@ -214,6 +224,18 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     setError(null);
     setIsSending(true);
 
+    // Prześlij pliki jeśli są jakieś
+    let uploadedFiles: any[] = [];
+    if (files.length > 0) {
+      const uploadResult = await uploadFiles(user.id);
+      if (!uploadResult.success) {
+        setError("Nie udało się przesłać niektórych plików. Spróbuj ponownie.");
+        setIsSending(false);
+        return;
+      }
+      uploadedFiles = uploadResult.uploadedFiles;
+    }
+
     try {
       // 1. Dodaj wiadomość użytkownika do lokalnego stanu
       const userMessage: ChatMessage = {
@@ -279,6 +301,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           chatId: isNewChat ? null : chatId,
           apiKey: apiKey, // Prześlij odpowiedni klucz API
           provider: requiredProvider, // Prześlij informację o dostawcy
+          attachments: uploadedFiles, // Prześlij załączniki
         }),
       });
 
@@ -346,6 +369,8 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           );
           // Zresetuj flagę świeżo utworzonego czatu po zakończeniu animacji
           setIsJustCreated(false);
+          // Wyczyść pliki po pomyślnym wysłaniu
+          clearFiles();
         }, 1000); // Zwiększone z 800ms na 1000ms
       }, 200); // Małe opóźnienie 200ms
     } catch (error: any) {
@@ -383,6 +408,38 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       default:
         return "🤖";
     }
+  };
+
+  // Funkcje obsługi plików
+  const handleFileSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = e.target.files;
+    if (selectedFiles) {
+      addFiles(selectedFiles);
+    }
+    // Resetuj input aby można było wybrać ten sam plik ponownie
+    e.target.value = "";
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const getFileIcon = (mimetype: string): string => {
+    if (mimetype.startsWith("image/")) return "🖼️";
+    if (mimetype === "application/pdf") return "📄";
+    if (mimetype.includes("word")) return "📝";
+    if (mimetype.includes("excel") || mimetype.includes("spreadsheet"))
+      return "📊";
+    if (mimetype.includes("text")) return "📄";
+    return "📎";
   };
 
   return (
@@ -749,9 +806,116 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
               </select>
             </HStack>
 
+            {/* Wyświetlanie załączników */}
+            {files.length > 0 && (
+              <VStack gap={2} align="stretch" w="full">
+                <Text fontSize="sm" color="gray.600" fontWeight="500">
+                  Załączniki ({files.length}):
+                </Text>
+                <HStack gap={2} flexWrap="wrap">
+                  {files.map((file) => (
+                    <Box
+                      key={file.id}
+                      bg="gray.50"
+                      border="1px solid"
+                      borderColor="gray.200"
+                      borderRadius="8px"
+                      p={2}
+                      minW="120px"
+                    >
+                      <HStack gap={2} justify="space-between">
+                        <VStack align="start" gap={1} flex={1} minW={0}>
+                          <HStack gap={1}>
+                            <Text fontSize="sm">
+                              {getFileIcon(file.mimetype)}
+                            </Text>
+                            <Text
+                              fontSize="xs"
+                              color="gray.800"
+                              fontWeight="500"
+                              maxW="80px"
+                              style={{
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {file.filename}
+                            </Text>
+                          </HStack>
+                          <Text fontSize="xs" color="gray.500">
+                            {formatFileSize(file.size)}
+                          </Text>
+                          {file.isUploading && (
+                            <HStack gap={1}>
+                              <Spinner size="xs" />
+                              <Text fontSize="xs" color="blue.500">
+                                Przesyłanie...
+                              </Text>
+                            </HStack>
+                          )}
+                          {file.error && (
+                            <Text fontSize="xs" color="red.500">
+                              Błąd: {file.error}
+                            </Text>
+                          )}
+                        </VStack>
+                        <IconButton
+                          aria-label="Usuń plik"
+                          size="xs"
+                          variant="ghost"
+                          colorScheme="red"
+                          onClick={() => removeFile(file.id)}
+                        >
+                          <HiOutlineXMark />
+                        </IconButton>
+                      </HStack>
+                      {file.preview && (
+                        <Image
+                          src={file.preview}
+                          alt={file.filename}
+                          maxH="60px"
+                          maxW="full"
+                          objectFit="cover"
+                          borderRadius="4px"
+                          mt={2}
+                        />
+                      )}
+                    </Box>
+                  ))}
+                </HStack>
+              </VStack>
+            )}
+
             {/* Formularz wiadomości */}
             <form onSubmit={handleSendMessage} style={{ width: "100%" }}>
+              {/* Ukryty input do plików */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                multiple
+                accept="image/*,.pdf,.txt,.csv,.json,.docx,.xlsx"
+                style={{ display: "none" }}
+              />
+
               <HStack gap={3}>
+                {/* Przycisk załącznika */}
+                <IconButton
+                  aria-label="Załącz plik"
+                  size="lg"
+                  variant="ghost"
+                  color="gray.500"
+                  onClick={handleFileSelect}
+                  disabled={isSending || isUploading}
+                  _hover={{
+                    color: "gray.700",
+                    bg: "gray.100",
+                  }}
+                >
+                  <HiOutlinePaperClip />
+                </IconButton>
+
                 <Input
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
@@ -763,8 +927,12 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                   }}
                   placeholder={`Napisz wiadomość do ${
                     currentModel?.name || "AI"
+                  }${
+                    files.length > 0
+                      ? ` (${files.length} plik${files.length > 1 ? "ów" : ""})`
+                      : ""
                   }...`}
-                  disabled={isSending}
+                  disabled={isSending || isUploading}
                   size="lg"
                   bg="white"
                   border="1px solid"
@@ -790,9 +958,11 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                   color="white"
                   borderRadius="12px"
                   px={6}
-                  disabled={!newMessage.trim() || isSending}
-                  loading={isSending}
-                  loadingText="Wysyłanie..."
+                  disabled={!newMessage.trim() || isSending || isUploading}
+                  loading={isSending || isUploading}
+                  loadingText={
+                    isUploading ? "Przesyłanie plików..." : "Wysyłanie..."
+                  }
                   _hover={{
                     bg: "blue.600",
                   }}

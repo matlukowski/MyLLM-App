@@ -2,6 +2,15 @@ import express, { Express, Request, Response } from "express";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+import path from "path";
+import {
+  upload,
+  convertFileToText,
+  formatFileSize,
+  validateFile,
+  deleteFile,
+  fileExists,
+} from "./utils/fileUtils";
 
 // Inicjalizacje
 const prisma = new PrismaClient();
@@ -14,6 +23,9 @@ app.use(
   })
 );
 app.use(express.json());
+
+// Serwowanie statycznych plików z katalogu uploads
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // --- API Endpoints ---
 
@@ -302,9 +314,43 @@ async function generateSimpleAIResponse(
   userMessage: string,
   provider: string,
   apiKey: string,
-  modelId: string
+  modelId: string,
+  attachments: any[] = []
 ): Promise<string> {
   const basicPrompt = `Jesteś pomocnym asystentem AI. Odpowiedz na pytanie użytkownika w sposób zwięzły i pomocny.`;
+
+  // Przetwórz załączniki
+  let attachmentContext = "";
+  if (attachments && attachments.length > 0) {
+    attachmentContext = "\n\nZałączniki użytkownika:\n";
+
+    for (const attachment of attachments) {
+      try {
+        const filePath = path.join(
+          __dirname,
+          "../uploads",
+          path.basename(attachment.url)
+        );
+        if (fileExists(filePath)) {
+          const fileContent = await convertFileToText(
+            filePath,
+            attachment.mimetype
+          );
+          attachmentContext += `\n${fileContent}\n`;
+        } else {
+          attachmentContext += `\n[BŁĄD: Plik ${attachment.filename} nie został znaleziony]\n`;
+        }
+      } catch (error) {
+        console.error(
+          `Błąd przetwarzania załącznika ${attachment.filename}:`,
+          error
+        );
+        attachmentContext += `\n[BŁĄD: Nie udało się przetworzyć pliku ${attachment.filename}]\n`;
+      }
+    }
+  }
+
+  const fullMessage = userMessage + attachmentContext;
 
   if (provider === "google") {
     try {
@@ -327,7 +373,7 @@ async function generateSimpleAIResponse(
         systemInstruction: basicPrompt,
       });
 
-      const result = await model.generateContent(userMessage);
+      const result = await model.generateContent(fullMessage);
       return (
         result.response.text() ||
         "Przepraszam, nie mogę wygenerować odpowiedzi."
@@ -352,7 +398,7 @@ async function generateSimpleAIResponse(
         model: openaiModel,
         messages: [
           { role: "system", content: basicPrompt },
-          { role: "user", content: userMessage },
+          { role: "user", content: fullMessage },
         ],
         temperature: 0.7,
         max_tokens: 2000,
@@ -382,7 +428,7 @@ async function generateSimpleAIResponse(
         model: claudeModel,
         max_tokens: 2000,
         system: basicPrompt,
-        messages: [{ role: "user", content: userMessage }],
+        messages: [{ role: "user", content: fullMessage }],
       });
 
       const content = response.content[0];
@@ -398,9 +444,158 @@ async function generateSimpleAIResponse(
   }
 }
 
+// --- Endpointy do obsługi plików ---
+
+// Endpoint do przesyłania plików
+app.post("/api/files/upload", (req: Request, res: Response) => {
+  // @ts-ignore - Konflikt typów między wersjami Express
+  const uploadHandler = upload.single("file");
+
+  // @ts-ignore - Konflikt typów między wersjami Express
+  uploadHandler(req, res, async (err: any) => {
+    try {
+      if (err) {
+        console.error("❌ Błąd multer:", err);
+        return res
+          .status(400)
+          .json({ error: err.message || "Błąd przesyłania pliku" });
+      }
+
+      const file = (req as any).file;
+      if (!file) {
+        return res.status(400).json({ error: "Nie przesłano pliku" });
+      }
+
+      // Pobierz userId z body (będzie wysłany przez frontend)
+      const userId = (req as any).body?.userId;
+      if (!userId) {
+        return res.status(400).json({ error: "userId jest wymagany" });
+      }
+
+      // Walidacja pliku
+      const validation = validateFile(file);
+      if (!validation.isValid) {
+        // Usuń plik jeśli walidacja nie powiodła się
+        if (fileExists(file.path)) {
+          await deleteFile(file.path);
+        }
+        return res.status(400).json({ error: validation.error });
+      }
+
+      // Znajdź lub utwórz tymczasowy czat dla załączników
+      let tempChat = await prisma.chat.findFirst({
+        where: { title: "TEMP_ATTACHMENTS" },
+      });
+
+      if (!tempChat) {
+        tempChat = await prisma.chat.create({
+          data: {
+            title: "TEMP_ATTACHMENTS",
+            metadata: { isTemp: true },
+          },
+        });
+      }
+
+      // Utwórz tymczasową wiadomość dla załącznika
+      const tempMessage = await prisma.message.create({
+        data: {
+          content: `[TEMP_ATTACHMENT_${Date.now()}]`,
+          senderId: userId,
+          chatId: tempChat.id,
+        },
+      });
+
+      // Utwórz rekord w bazie danych
+      const attachment = await prisma.attachment.create({
+        data: {
+          url: `/uploads/${file.filename}`,
+          filename: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+          messageId: tempMessage.id,
+        },
+      });
+
+      console.log("✅ Plik przesłany:", {
+        id: attachment.id,
+        filename: attachment.filename,
+        size: formatFileSize(attachment.size),
+      });
+
+      res.json({
+        id: attachment.id,
+        url: attachment.url,
+        filename: attachment.filename,
+        mimetype: attachment.mimetype,
+        size: attachment.size,
+        formattedSize: formatFileSize(attachment.size),
+      });
+    } catch (error: any) {
+      console.error("❌ Błąd przesyłania pliku:", error);
+
+      // Usuń plik w przypadku błędu
+      const file = (req as any).file;
+      if (file && fileExists(file.path)) {
+        try {
+          await deleteFile(file.path);
+        } catch (deleteError) {
+          console.error("❌ Błąd usuwania pliku po błędzie:", deleteError);
+        }
+      }
+
+      res.status(500).json({ error: "Błąd podczas przesyłania pliku" });
+    }
+  });
+});
+
+// Endpoint do usuwania plików
+app.delete("/api/files/:fileId", async (req: Request, res: Response) => {
+  const { fileId } = req.params;
+
+  try {
+    // Znajdź plik w bazie danych
+    const attachment = await prisma.attachment.findUnique({
+      where: { id: fileId },
+    });
+
+    if (!attachment) {
+      return res.status(404).json({ error: "Plik nie został znaleziony" });
+    }
+
+    // Usuń plik z dysku
+    const filePath = path.join(
+      __dirname,
+      "../uploads",
+      path.basename(attachment.url)
+    );
+    if (fileExists(filePath)) {
+      await deleteFile(filePath);
+    }
+
+    // Usuń rekord z bazy danych
+    await prisma.attachment.delete({
+      where: { id: fileId },
+    });
+
+    console.log("✅ Plik usunięty:", attachment.filename);
+    res.json({ message: "Plik został usunięty" });
+  } catch (error: any) {
+    console.error("❌ Błąd usuwania pliku:", error);
+    res.status(500).json({ error: "Błąd podczas usuwania pliku" });
+  }
+});
+
 // Prosty endpoint do czatu z AI - bez pamięci wektorowej
 app.post("/api/ai/chat", async (req: Request, res: Response) => {
-  const { userId, modelId, userMessage, chatId, apiKey, provider } = req.body;
+  const {
+    userId,
+    modelId,
+    userMessage,
+    chatId,
+    apiKey,
+    provider,
+    attachments,
+  } = req.body;
 
   if (!userId || !modelId || !userMessage) {
     return res.status(400).json({
@@ -446,13 +641,56 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     }
 
     // Zapisz wiadomość użytkownika
-    await prisma.message.create({
+    const userMessageRecord = await prisma.message.create({
       data: {
         content: userMessage,
         senderId: userId,
         chatId: currentChatId,
       },
     });
+
+    // Jeśli są załączniki, zaktualizuj je aby wskazywały na nową wiadomość
+    if (attachments && attachments.length > 0) {
+      const attachmentIds = attachments.map((att: any) => att.id);
+
+      // Zaktualizuj załączniki aby wskazywały na nową wiadomość użytkownika
+      await prisma.attachment.updateMany({
+        where: { id: { in: attachmentIds } },
+        data: { messageId: userMessageRecord.id },
+      });
+
+      // Usuń tymczasowe wiadomości (opcjonalne - dla porządku)
+      const tempMessageIds = await prisma.attachment.findMany({
+        where: { id: { in: attachmentIds } },
+        select: { messageId: true },
+      });
+
+      const uniqueTempMessageIds = [
+        ...new Set(tempMessageIds.map((att) => att.messageId)),
+      ];
+
+      // Sprawdź czy to są tymczasowe wiadomości i usuń je
+      for (const messageId of uniqueTempMessageIds) {
+        const message = await prisma.message.findUnique({
+          where: { id: messageId },
+          include: { attachments: true },
+        });
+
+        if (
+          message &&
+          message.content.startsWith("[TEMP_ATTACHMENT_") &&
+          message.attachments.length === 0
+        ) {
+          await prisma.message.delete({
+            where: { id: messageId },
+          });
+        }
+      }
+
+      console.log(
+        `✅ Zaktualizowano ${attachmentIds.length} załączników dla wiadomości ${userMessageRecord.id}`
+      );
+    }
 
     // Generuj prostą odpowiedź AI bez pamięci wektorowej
     let aiResponse = "";
@@ -469,7 +707,8 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
         userMessage,
         provider,
         apiKey,
-        modelId
+        modelId,
+        attachments
       );
 
       if (!aiResponse || !aiResponse.trim()) {

@@ -1,84 +1,215 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { toast } from "react-toastify";
 
-export interface UploadedFile {
+export interface FileUploadData {
   id: string;
-  originalName: string;
-  fileSize: number;
-  mimeType: string;
-  createdAt: string;
+  file: File;
+  url: string;
+  filename: string;
+  mimetype: string;
+  size: number;
+  preview?: string; // URL do podglądu (dla obrazów)
+  isUploading: boolean;
+  uploadProgress: number;
+  error?: string;
 }
 
-export function useFileUpload(chatId: string | null, userId: string | null) {
-  const [files, setFiles] = useState<UploadedFile[]>([]);
-  const [uploading, setUploading] = useState(false);
-
-  const validateFile = (file: File) => {
-    const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/gif",
-      "image/webp",
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "text/plain",
-    ];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error("Nieobsługiwany typ pliku");
-      return false;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Plik zbyt duży (max 10MB)");
-      return false;
-    }
-    return true;
-  };
-
-  const uploadFile = async (file: File) => {
-    if (!chatId || !userId || !validateFile(file)) return;
-
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("chatId", chatId);
-    formData.append("userId", userId);
-
-    try {
-      const res = await fetch("http://localhost:3001/api/files/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) throw new Error(await res.text());
-
-      const newFile: UploadedFile = await res.json();
-      setFiles((prev) => [...prev, newFile]);
-      toast.success("Plik załadowany");
-    } catch (error: any) {
-      toast.error(error.message || "Błąd uploadu");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removeFile = async (fileId: string) => {
-    if (!userId) return;
-
-    try {
-      const res = await fetch(`http://localhost:3001/api/files/${fileId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
-
-      if (!res.ok) throw new Error(await res.text());
-
-      setFiles((prev) => prev.filter((f) => f.id !== fileId));
-      toast.info("Plik usunięty");
-    } catch (error: any) {
-      toast.error(error.message || "Błąd usuwania");
-    }
-  };
-
-  return { files, uploading, uploadFile, removeFile };
+interface UseFileUploadReturn {
+  files: FileUploadData[];
+  isUploading: boolean;
+  addFiles: (files: FileList | File[]) => void;
+  removeFile: (fileId: string) => void;
+  clearFiles: () => void;
+  uploadFiles: (
+    userId: string
+  ) => Promise<{ success: boolean; uploadedFiles: any[] }>;
 }
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "text/plain",
+  "text/csv",
+  "application/json",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+];
+
+export const useFileUpload = (): UseFileUploadReturn => {
+  const [files, setFiles] = useState<FileUploadData[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const validateFile = (file: File): string | null => {
+    if (file.size > MAX_FILE_SIZE) {
+      return `Plik "${file.name}" jest za duży. Maksymalny rozmiar to 10MB.`;
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return `Plik "${file.name}" ma nieobsługiwany format. Dozwolone formaty: obrazy, PDF, TXT, CSV, JSON, DOCX, XLSX.`;
+    }
+
+    return null;
+  };
+
+  const createFilePreview = (file: File): Promise<string | undefined> => {
+    return new Promise((resolve) => {
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.onerror = () => resolve(undefined);
+        reader.readAsDataURL(file);
+      } else {
+        resolve(undefined);
+      }
+    });
+  };
+
+  const addFiles = useCallback(async (newFiles: FileList | File[]) => {
+    const fileArray = Array.from(newFiles);
+    const validFiles: FileUploadData[] = [];
+
+    for (const file of fileArray) {
+      const validationError = validateFile(file);
+
+      if (validationError) {
+        toast.error(validationError);
+        continue;
+      }
+
+      const preview = await createFilePreview(file);
+
+      const fileData: FileUploadData = {
+        id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        file,
+        url: "", // Zostanie ustawione po przesłaniu
+        filename: file.name,
+        mimetype: file.type,
+        size: file.size,
+        preview,
+        isUploading: false,
+        uploadProgress: 0,
+      };
+
+      validFiles.push(fileData);
+    }
+
+    if (validFiles.length > 0) {
+      setFiles((prev) => [...prev, ...validFiles]);
+      toast.success(`Dodano ${validFiles.length} plik(ów) do wysłania`);
+    }
+  }, []);
+
+  const removeFile = useCallback((fileId: string) => {
+    setFiles((prev) => prev.filter((file) => file.id !== fileId));
+  }, []);
+
+  const clearFiles = useCallback(() => {
+    setFiles([]);
+  }, []);
+
+  const uploadFiles = useCallback(
+    async (
+      userId: string
+    ): Promise<{
+      success: boolean;
+      uploadedFiles: any[];
+    }> => {
+      if (files.length === 0) {
+        return { success: true, uploadedFiles: [] };
+      }
+
+      setIsUploading(true);
+      const uploadedFiles: any[] = [];
+      let allSuccessful = true;
+
+      try {
+        for (const fileData of files) {
+          // Oznacz plik jako przesyłany
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === fileData.id
+                ? { ...f, isUploading: true, uploadProgress: 0 }
+                : f
+            )
+          );
+
+          try {
+            const formData = new FormData();
+            formData.append("file", fileData.file);
+            formData.append("userId", userId);
+
+            const response = await fetch(
+              "http://localhost:3001/api/files/upload",
+              {
+                method: "POST",
+                body: formData,
+              }
+            );
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || "Błąd przesyłania pliku");
+            }
+
+            const uploadResult = await response.json();
+            uploadedFiles.push(uploadResult);
+
+            // Oznacz plik jako przesłany
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.id === fileData.id
+                  ? {
+                      ...f,
+                      isUploading: false,
+                      uploadProgress: 100,
+                      url: uploadResult.url,
+                    }
+                  : f
+              )
+            );
+          } catch (error: any) {
+            console.error(
+              `Błąd przesyłania pliku ${fileData.filename}:`,
+              error
+            );
+
+            // Oznacz plik jako błędny
+            setFiles((prev) =>
+              prev.map((f) =>
+                f.id === fileData.id
+                  ? {
+                      ...f,
+                      isUploading: false,
+                      uploadProgress: 0,
+                      error: error.message,
+                    }
+                  : f
+              )
+            );
+
+            allSuccessful = false;
+            toast.error(`Nie udało się przesłać pliku: ${fileData.filename}`);
+          }
+        }
+
+        return { success: allSuccessful, uploadedFiles };
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [files]
+  );
+
+  return {
+    files,
+    isUploading,
+    addFiles,
+    removeFile,
+    clearFiles,
+    uploadFiles,
+  };
+};
