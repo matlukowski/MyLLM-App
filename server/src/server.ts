@@ -671,6 +671,8 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
 
       // Sprawdź czy to są tymczasowe wiadomości i usuń je
       for (const messageId of uniqueTempMessageIds) {
+        if (!messageId) continue;
+
         const message = await prisma.message.findUnique({
           where: { id: messageId },
           include: { attachments: true },
@@ -679,7 +681,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
         if (
           message &&
           message.content.startsWith("[TEMP_ATTACHMENT_") &&
-          message.attachments.length === 0
+          (message as any).attachments.length === 0
         ) {
           await prisma.message.delete({
             where: { id: messageId },
