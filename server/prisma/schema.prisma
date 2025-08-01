@@ -16,6 +16,7 @@ model User {
 
   sentMessages   Message[]         @relation("SentMessages")
   chatParticipants ChatParticipant[]
+  memorySettings MemorySettings?
 }
 
 model Chat {
@@ -69,4 +70,51 @@ model Attachment {
   // Relacja zwrotna do wiadomości
   messageId String
   message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+}
+
+// 👇 --- PAMIĘĆ WEKTOROWA ---
+// Główna tabela przechowująca wpisy pamięci wektorowej
+model VectorMemory {
+  id              String   @id @default(cuid())
+  content         String   // Oryginalny tekst wiadomości
+  embedding       Float[]  // Wektor embeddings (PostgreSQL wspiera array)
+  importanceScore Float    @default(0.5) // Ocena ważności 0-1
+  timestamp       DateTime @default(now())
+  
+  // Relacje
+  userId          String
+  chatId          String
+  messageId       String?  // Opcjonalne - może być null dla zagregowanych wspomnień
+  
+  // Kontekst i metadane
+  context         String?  // Kilka poprzednich wiadomości jako kontekst
+  tags            String[] // Automatycznie generowane tagi
+  metadata        Json?    // Dodatkowe metadane (model użyty, typ interakcji, itp.)
+  
+  // Indeksy dla wydajności
+  @@index([userId])
+  @@index([chatId])  
+  @@index([timestamp])
+  @@index([importanceScore])
+}
+
+// Tabela do przechowywania konfiguracji użytkownika dla pamięci
+model MemorySettings {
+  id                    String  @id @default(cuid())
+  userId                String  @unique
+  importanceThreshold   Float   @default(0.3) // Próg ważności dla zapisywania
+  maxMemoryEntries      Int     @default(10000) // Maksymalna liczba wpisów
+  retentionDays         Int     @default(365) // Ile dni przechowywać wpisy
+  autoCleanupEnabled    Boolean @default(true)
+  
+  // Nowe opcje prywatności
+  memoryEnabled         Boolean @default(true) // Czy w ogóle zapisywać do pamięci
+  autoDeleteOnChatRemoval Boolean @default(true) // Czy automatycznie usuwać pamięć przy usuwaniu czatu
+  incognitoMode         Boolean @default(false) // Tryb incognito - nie zapisuj nic
+  shareMemoryAcrossChats Boolean @default(true) // Czy dzielić pamięć między różnymi czatami
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

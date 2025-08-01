@@ -11,10 +11,25 @@ import {
   deleteFile,
   fileExists,
 } from "./utils/fileUtils";
+import VectorMemoryService from "./services/VectorMemoryService";
 
 // Inicjalizacje
 const prisma = new PrismaClient();
 const app: Express = express();
+const vectorMemoryService = new VectorMemoryService(prisma);
+
+// Inicjalizacja serwisu pamięci wektorowej w tle
+(async () => {
+  try {
+    console.log('🧠 Rozpoczynam inicjalizację VectorMemoryService...');
+    await vectorMemoryService.initialize();
+    console.log('✅ VectorMemoryService zainicjalizowany poprawnie');
+  } catch (error) {
+    console.error('❌ Nie udało się zainicjalizować VectorMemoryService:', error);
+    console.log('⚠️  Aplikacja będzie działać bez pamięci wektorowej');
+    console.log('💡 Spróbuj ponownie uruchomić serwer - pierwszy model może być pobierany');
+  }
+})();
 
 // Middlewares
 app.use(
@@ -286,6 +301,27 @@ app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
         .json({ error: "Czat nie został znaleziony lub brak dostępu" });
     }
 
+    // Sprawdź czy użytkownik chce automatycznie usuwać pamięć
+    let memoryDeletedCount = 0;
+    if (vectorMemoryService.isReady()) {
+      try {
+        const userSettings = await prisma.memorySettings.findUnique({
+          where: { userId }
+        });
+        
+        if (userSettings?.autoDeleteOnChatRemoval !== false) {
+          // Domyślnie usuń pamięć (chyba że użytkownik wyłączył)
+          memoryDeletedCount = await vectorMemoryService.deleteMemoryByChat(chatId, userId);
+          console.log(`🗑️ Automatycznie usunięto pamięć czatu (ustawienie: ${userSettings?.autoDeleteOnChatRemoval})`);
+        } else {
+          console.log(`🔒 Zachowano pamięć czatu (ustawienie użytkownika)`);
+        }
+      } catch (error) {
+        console.error("❌ Błąd usuwania pamięci wektorowej:", error);
+        // Nie przerywamy procesu - pamięć można wyczyścić później
+      }
+    }
+
     // Usuń wszystkie wiadomości z czatu
     await prisma.message.deleteMany({
       where: { chatId },
@@ -301,23 +337,29 @@ app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
       where: { id: chatId },
     });
 
-    console.log("✅ Usunięto czat:", chatId);
-    res.json({ message: "Czat został usunięty" });
+    console.log("✅ Usunięto czat:", chatId, `(${memoryDeletedCount} wpisów pamięci)`);
+    res.json({ 
+      message: "Czat został usunięty",
+      memoryEntriesDeleted: memoryDeletedCount
+    });
   } catch (error) {
     console.error("❌ Błąd podczas usuwania czatu:", error);
     res.status(500).json({ error: "Nie udało się usunąć czatu" });
   }
 });
 
-// Funkcja do generowania prostej odpowiedzi AI bez pamięci wektorowej
-async function generateSimpleAIResponse(
+// Funkcja do generowania odpowiedzi AI z pamięcią wektorową
+async function generateAIResponseWithMemory(
   userMessage: string,
   provider: string,
   apiKey: string,
   modelId: string,
+  userId: string,
+  chatId: string,
   attachments: any[] = []
 ): Promise<string> {
-  const basicPrompt = `Jesteś pomocnym asystentem AI. Odpowiedz na pytanie użytkownika w sposób zwięzły i pomocny.`;
+  const basicPrompt = `Jesteś pomocnym asystentem AI. Odpowiadaj na pytania użytkownika w sposób zwięzły i pomocny. 
+Jeśli otrzymasz kontekst z poprzednich rozmów, wykorzystaj te informacje aby udzielić bardziej personalizowanej i spójnej odpowiedzi.`;
 
   // Przetwórz załączniki
   let attachmentContext = "";
@@ -350,7 +392,59 @@ async function generateSimpleAIResponse(
     }
   }
 
-  const fullMessage = userMessage + attachmentContext;
+  // Pobierz kontekst z pamięci wektorowej (jeśli serwis jest gotowy)
+  let memoryContext = "";
+  if (vectorMemoryService.isReady()) {
+    try {
+      memoryContext = await vectorMemoryService.getMemoryContext(
+        userMessage,
+        userId,
+        undefined, // Nie przekazujemy chatId - wyszukiwanie globalne!
+        1500 // Maksymalnie 1500 znaków kontekstu
+      );
+      
+      if (memoryContext) {
+        console.log(`🧠 Znaleziono kontekst z pamięci wektorowej (${memoryContext.length} znaków)`);
+      }
+    } catch (error) {
+      console.error('❌ Błąd pobierania kontekstu z pamięci:', error);
+    }
+  } else {
+    // Fallback: użyj historii z aktualnego czatu jeśli pamięć wektorowa nie jest gotowa
+    console.log('⚠️ Pamięć wektorowa nie jest gotowa, używam historii czatu');
+    try {
+      const recentMessages = await prisma.message.findMany({
+        where: { chatId },
+        orderBy: { createdAt: 'desc' },
+        take: 6, // Ostatnie 6 wiadomości
+        include: { sender: { select: { username: true } } }
+      });
+
+      if (recentMessages.length > 1) { // Więcej niż aktualna wiadomość
+        const chatHistory = recentMessages
+          .reverse()
+          .slice(0, -1) // Usuń aktualną wiadomość użytkownika
+          .map(msg => `${(msg.sender as any)?.username || 'AI'}: ${msg.content}`)
+          .join('\n');
+        
+        if (chatHistory) {
+          memoryContext = `Historia z tego czatu:\n\n${chatHistory}`;
+          console.log(`📜 Używam historii czatu (${memoryContext.length} znaków)`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Błąd pobierania historii czatu:', error);
+    }
+  }
+
+  // Buduj pełną wiadomość z kontekstem
+  let fullMessage = userMessage;
+  
+  if (memoryContext) {
+    fullMessage = `${memoryContext}\n\n---\n\nBieżące pytanie użytkownika: ${userMessage}`;
+  }
+  
+  fullMessage += attachmentContext;
 
   if (provider === "google") {
     try {
@@ -704,12 +798,14 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
         modelId: modelId,
       });
 
-      // Prosta implementacja - każdy czat jest świeży bez pamięci poprzednich rozmów
-      aiResponse = await generateSimpleAIResponse(
+      // Nowa implementacja z pamięcią wektorową
+      aiResponse = await generateAIResponseWithMemory(
         userMessage,
         provider,
         apiKey,
         modelId,
+        userId,
+        currentChatId,
         attachments
       );
 
@@ -728,13 +824,51 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     }
 
     // Zapisz odpowiedź AI
-    await prisma.message.create({
+    const aiMessageRecord = await prisma.message.create({
       data: {
         content: aiResponse,
         senderId: "ai-assistant",
         chatId: currentChatId,
       },
     });
+
+    // Zapisz wiadomości do pamięci wektorowej (asynchronicznie)
+    if (vectorMemoryService.isReady()) {
+      // Pobierz kontekst (kilka poprzednich wiadomości)
+      const recentMessages = await prisma.message.findMany({
+        where: { chatId: currentChatId },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        include: { sender: { select: { username: true } } }
+      });
+      
+      const context = recentMessages
+        .reverse()
+        .map(msg => `${(msg.sender as any)?.username || 'AI'}: ${msg.content}`)
+        .join('\n');
+
+      // Zapisz wiadomość użytkownika do pamięci (asynchronicznie)
+      vectorMemoryService.addMemoryEntry(
+        userMessage,
+        userId,
+        currentChatId,
+        userMessageRecord.id,
+        context
+      ).catch(error => {
+        console.error('❌ Błąd zapisywania wiadomości użytkownika do pamięci:', error);
+      });
+
+      // Zapisz odpowiedź AI do pamięci jako część konwersacji użytkownika (asynchronicznie)
+      vectorMemoryService.addMemoryEntry(
+        `AI odpowiedział: ${aiResponse}`, // Oznacz że to odpowiedź AI
+        userId, // Zapisz jako część pamięci użytkownika
+        currentChatId,
+        aiMessageRecord.id,
+        context
+      ).catch(error => {
+        console.error('❌ Błąd zapisywania odpowiedzi AI do pamięci:', error);
+      });
+    }
 
     // Zaktualizuj czas ostatniej modyfikacji czatu
     await prisma.chat.update({
@@ -746,6 +880,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       responseLength: aiResponse.length,
       chatId: currentChatId,
       provider: provider,
+      memoryEnabled: vectorMemoryService.isReady()
     });
 
     res.json({
@@ -759,6 +894,335 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     res.status(500).json({
       error: "Wystąpił błąd podczas przetwarzania żądania AI",
     });
+  }
+});
+
+// --- Endpointy do zarządzania pamięcią wektorową ---
+
+// TESTOWY endpoint do ręcznego sprawdzenia pamięci
+app.post("/api/memory/test", async (req: Request, res: Response) => {
+  const { userId, content } = req.body;
+
+  if (!userId || !content) {
+    return res.status(400).json({ error: "userId i content są wymagane" });
+  }
+
+  try {
+    console.log(`🧪 TEST: Dodaję do pamięci: "${content}"`);
+    
+    if (vectorMemoryService.isReady()) {
+      const result = await vectorMemoryService.addMemoryEntry(
+        content,
+        userId,
+        "test-chat",
+        undefined,
+        "Test context"
+      );
+      
+      res.json({ 
+        success: true, 
+        result,
+        message: "Wpis dodany do pamięci" 
+      });
+    } else {
+      res.json({ 
+        success: false, 
+        message: "Serwis pamięci wektorowej nie jest gotowy" 
+      });
+    }
+  } catch (error) {
+    console.error("❌ Błąd testu pamięci:", error);
+    res.status(500).json({ error: "Błąd testu pamięci" });
+  }
+});
+
+// Endpoint do wyszukiwania w pamięci
+app.post("/api/memory/search", async (req: Request, res: Response) => {
+  const { query, userId, chatId, limit = 10, minImportance = 0.3 } = req.body;
+
+  if (!query || !userId) {
+    return res.status(400).json({ error: "query i userId są wymagane" });
+  }
+
+  if (!vectorMemoryService.isReady()) {
+    return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
+  }
+
+  try {
+    const results = await vectorMemoryService.searchMemory(query, {
+      userId,
+      chatId,
+      limit,
+      minImportance
+    });
+
+    res.json({ results, count: results.length });
+  } catch (error) {
+    console.error("❌ Błąd wyszukiwania w pamięci:", error);
+    res.status(500).json({ error: "Błąd podczas wyszukiwania w pamięci" });
+  }
+});
+
+// Endpoint do czyszczenia pamięci użytkownika (stare wpisy)
+app.delete("/api/memory/cleanup/:userId", async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  if (!vectorMemoryService.isReady()) {
+    return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
+  }
+
+  try {
+    const deletedCount = await vectorMemoryService.cleanupMemory(userId);
+    res.json({ message: `Wyczyszczono ${deletedCount} starych wpisów z pamięci`, deletedCount });
+  } catch (error) {
+    console.error("❌ Błąd czyszczenia pamięci:", error);
+    res.status(500).json({ error: "Błąd podczas czyszczenia pamięci" });
+  }
+});
+
+// Endpoint do usuwania pamięci konkretnego czatu
+app.delete("/api/memory/chat/:chatId", async (req: Request, res: Response) => {
+  const { chatId } = req.params;
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: "userId jest wymagany" });
+  }
+
+  if (!vectorMemoryService.isReady()) {
+    return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
+  }
+
+  try {
+    const deletedCount = await vectorMemoryService.deleteMemoryByChat(chatId, userId);
+    res.json({ 
+      message: `Usunięto pamięć z czatu ${chatId}`, 
+      deletedCount,
+      chatId 
+    });
+  } catch (error) {
+    console.error("❌ Błąd usuwania pamięci czatu:", error);
+    res.status(500).json({ error: "Błąd podczas usuwania pamięci czatu" });
+  }
+});
+
+// Endpoint do usuwania pamięci konkretnej wiadomości
+app.delete("/api/memory/message/:messageId", async (req: Request, res: Response) => {
+  const { messageId } = req.params;
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: "userId jest wymagany" });
+  }
+
+  if (!vectorMemoryService.isReady()) {
+    return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
+  }
+
+  try {
+    const deletedCount = await vectorMemoryService.deleteMemoryByMessage(messageId, userId);
+    res.json({ 
+      message: `Usunięto pamięć wiadomości ${messageId}`, 
+      deletedCount,
+      messageId 
+    });
+  } catch (error) {
+    console.error("❌ Błąd usuwania pamięci wiadomości:", error);
+    res.status(500).json({ error: "Błąd podczas usuwania pamięci wiadomości" });
+  }
+});
+
+// Endpoint do usuwania całej pamięci użytkownika
+app.delete("/api/memory/user/:userId", async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const { confirmUserId } = req.body; // Dodatkowa weryfikacja
+
+  if (!confirmUserId || confirmUserId !== userId) {
+    return res.status(400).json({ error: "Potwierdzenie userId jest wymagane" });
+  }
+
+  if (!vectorMemoryService.isReady()) {
+    return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
+  }
+
+  try {
+    const deletedCount = await vectorMemoryService.deleteAllUserMemory(userId);
+    res.json({ 
+      message: `Usunięto całą pamięć użytkownika ${userId}`, 
+      deletedCount,
+      userId 
+    });
+  } catch (error) {
+    console.error("❌ Błąd usuwania pamięci użytkownika:", error);
+    res.status(500).json({ error: "Błąd podczas usuwania pamięci użytkownika" });
+  }
+});
+
+// Endpoint do eksportu pamięci użytkownika
+app.get("/api/memory/export/:userId", async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  try {
+    const memoryEntries = await prisma.vectorMemory.findMany({
+      where: { userId },
+      orderBy: { timestamp: 'desc' },
+      select: {
+        id: true,
+        content: true,
+        importanceScore: true,
+        timestamp: true,
+        tags: true,
+        context: true,
+        metadata: true
+      }
+    });
+
+    const exportData = {
+      userId,
+      exportDate: new Date().toISOString(),
+      entriesCount: memoryEntries.length,
+      entries: memoryEntries
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="memory-export-${userId}-${Date.now()}.json"`);
+    res.json(exportData);
+  } catch (error) {
+    console.error("❌ Błąd eksportu pamięci:", error);
+    res.status(500).json({ error: "Błąd podczas eksportu pamięci" });
+  }
+});
+
+// Endpoint do statystyk pamięci użytkownika (ulepszony)
+app.get("/api/memory/stats/:userId", async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  try {
+    if (vectorMemoryService.isReady()) {
+      // Użyj nowej metody z VectorMemoryService
+      const stats = await vectorMemoryService.getMemoryStats(userId);
+      res.json({
+        ...stats,
+        memoryServiceReady: true
+      });
+    } else {
+      // Fallback - podstawowe statystyki z Prisma
+      const totalEntries = await prisma.vectorMemory.count({ where: { userId } });
+      
+      const averageImportance = await prisma.vectorMemory.aggregate({
+        where: { userId },
+        _avg: { importanceScore: true }
+      });
+
+      res.json({
+        totalEntries,
+        averageImportance: averageImportance._avg.importanceScore || 0,
+        entriesByChat: [],
+        topTags: [],
+        oldestEntry: null,
+        newestEntry: null,
+        memoryServiceReady: false
+      });
+    }
+  } catch (error) {
+    console.error("❌ Błąd pobierania statystyk pamięci:", error);
+    res.status(500).json({ error: "Błąd podczas pobierania statystyk pamięci" });
+  }
+});
+
+// Endpoint do weryfikacji spójności pamięci
+app.post("/api/memory/validate/:userId", async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  if (!vectorMemoryService.isReady()) {
+    return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
+  }
+
+  try {
+    console.log(`🔍 Rozpoczynam weryfikację spójności pamięci dla użytkownika ${userId}`);
+    
+    const validationStats = await vectorMemoryService.validateMemoryConsistency(userId);
+    
+    res.json({
+      message: "Weryfikacja spójności zakończona",
+      stats: validationStats,
+      userId
+    });
+  } catch (error) {
+    console.error("❌ Błąd weryfikacji spójności pamięci:", error);
+    res.status(500).json({ error: "Błąd podczas weryfikacji spójności pamięci" });
+  }
+});
+
+// Endpoint do ustawień pamięci użytkownika
+app.get("/api/memory/settings/:userId", async (req: Request, res: Response) => {
+  const { userId } = req.params;
+
+  try {
+    let settings = await prisma.memorySettings.findUnique({
+      where: { userId }
+    });
+
+    if (!settings) {
+      // Utwórz domyślne ustawienia
+      settings = await prisma.memorySettings.create({
+        data: { userId }
+      });
+    }
+
+    res.json(settings);
+  } catch (error) {
+    console.error("❌ Błąd pobierania ustawień pamięci:", error);
+    res.status(500).json({ error: "Błąd podczas pobierania ustawień pamięci" });
+  }
+});
+
+// Endpoint do aktualizacji ustawień pamięci (rozszerzony)
+app.put("/api/memory/settings/:userId", async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const { 
+    importanceThreshold, 
+    maxMemoryEntries, 
+    retentionDays, 
+    autoCleanupEnabled,
+    memoryEnabled,
+    autoDeleteOnChatRemoval,
+    incognitoMode,
+    shareMemoryAcrossChats
+  } = req.body;
+
+  try {
+    const settings = await prisma.memorySettings.upsert({
+      where: { userId },
+      update: {
+        ...(importanceThreshold !== undefined && { importanceThreshold }),
+        ...(maxMemoryEntries !== undefined && { maxMemoryEntries }),
+        ...(retentionDays !== undefined && { retentionDays }),
+        ...(autoCleanupEnabled !== undefined && { autoCleanupEnabled }),
+        ...(memoryEnabled !== undefined && { memoryEnabled }),
+        ...(autoDeleteOnChatRemoval !== undefined && { autoDeleteOnChatRemoval }),
+        ...(incognitoMode !== undefined && { incognitoMode }),
+        ...(shareMemoryAcrossChats !== undefined && { shareMemoryAcrossChats }),
+        updatedAt: new Date()
+      },
+      create: {
+        userId,
+        importanceThreshold: importanceThreshold || 0.3,
+        maxMemoryEntries: maxMemoryEntries || 10000,
+        retentionDays: retentionDays || 365,
+        autoCleanupEnabled: autoCleanupEnabled !== undefined ? autoCleanupEnabled : true,
+        memoryEnabled: memoryEnabled !== undefined ? memoryEnabled : true,
+        autoDeleteOnChatRemoval: autoDeleteOnChatRemoval !== undefined ? autoDeleteOnChatRemoval : true,
+        incognitoMode: incognitoMode !== undefined ? incognitoMode : false,
+        shareMemoryAcrossChats: shareMemoryAcrossChats !== undefined ? shareMemoryAcrossChats : true
+      }
+    });
+
+    console.log(`⚙️ Zaktualizowano ustawienia pamięci dla użytkownika ${userId}`);
+    res.json(settings);
+  } catch (error) {
+    console.error("❌ Błąd aktualizacji ustawień pamięci:", error);
+    res.status(500).json({ error: "Błąd podczas aktualizacji ustawień pamięci" });
   }
 });
 
