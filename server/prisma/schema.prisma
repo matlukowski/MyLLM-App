@@ -112,6 +112,7 @@ model MemorySettings {
   autoDeleteOnChatRemoval Boolean @default(true) // Czy automatycznie usuwać pamięć przy usuwaniu czatu
   incognitoMode         Boolean @default(false) // Tryb incognito - nie zapisuj nic
   shareMemoryAcrossChats Boolean @default(true) // Czy dzielić pamięć między różnymi czatami
+  memoryAggressiveness  String  @default("conservative") // Poziom agresywności: conservative/moderate/aggressive
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

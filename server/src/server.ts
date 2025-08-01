@@ -12,6 +12,7 @@ import {
   fileExists,
 } from "./utils/fileUtils";
 import VectorMemoryService from "./services/VectorMemoryService";
+import IntentAnalyzer, { type MemoryAggressiveness } from "./services/IntentAnalyzer";
 
 // Inicjalizacje
 const prisma = new PrismaClient();
@@ -358,8 +359,10 @@ async function generateAIResponseWithMemory(
   chatId: string,
   attachments: any[] = []
 ): Promise<string> {
-  const basicPrompt = `Jesteś pomocnym asystentem AI. Odpowiadaj na pytania użytkownika w sposób zwięzły i pomocny. 
-Jeśli otrzymasz kontekst z poprzednich rozmów, wykorzystaj te informacje aby udzielić bardziej personalizowanej i spójnej odpowiedzi.`;
+  const basicPrompt = `Jesteś inteligentnym asystentem AI. Odpowiadaj w sposób rzeczowy, pomocny i praktyczny.
+Jeśli otrzymasz kontekst z poprzednich rozmów, wykorzystaj te informacje naturalnie.
+Dostosowuj długość odpowiedzi do złożoności pytania. Bądź pozytywny i motywujący, ale unikaj przesadnej empatii czy rozczulania się.
+Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.`;
 
   // Przetwórz załączniki
   let attachmentContext = "";
@@ -392,35 +395,59 @@ Jeśli otrzymasz kontekst z poprzednich rozmów, wykorzystaj te informacje aby u
     }
   }
 
-  // Pobierz kontekst z pamięci wektorowej (jeśli serwis jest gotowy)
+  // NOWA LOGIKA: Inteligentne wybieranie źródła kontekstu
   let memoryContext = "";
-  if (vectorMemoryService.isReady()) {
-    try {
+  
+  try {
+    // 1. Pobierz długość historii aktualnego czatu
+    const chatHistoryCount = await prisma.message.count({
+      where: { chatId }
+    });
+
+    // 2. Pobierz ustawienia użytkownika
+    const userSettings = await prisma.memorySettings.findUnique({
+      where: { userId }
+    });
+    
+    const aggressiveness = (userSettings?.memoryAggressiveness || 'conservative') as MemoryAggressiveness;
+
+    // 3. Analizuj intencję użytkownika
+    const intentAnalysis = IntentAnalyzer.analyzeIntent(
+      userMessage,
+      chatHistoryCount,
+      aggressiveness
+    );
+
+    console.log(`🧐 Analiza intencji: ${intentAnalysis.detectedIntent} (ufność: ${intentAnalysis.confidence.toFixed(2)})`);
+    console.log(`💡 Uzasadnienie: ${intentAnalysis.reasoning}`);
+
+    // 4. Pobierz kontekst na podstawie analizy intencji
+    if (intentAnalysis.useVectorMemory && vectorMemoryService.isReady()) {
+      // Użyj pamięci wektorowej
       memoryContext = await vectorMemoryService.getMemoryContext(
         userMessage,
         userId,
-        undefined, // Nie przekazujemy chatId - wyszukiwanie globalne!
-        1500 // Maksymalnie 1500 znaków kontekstu
+        intentAnalysis.useChatHistory ? undefined : chatId, // Globalne vs lokalne
+        1500
       );
       
       if (memoryContext) {
-        console.log(`🧠 Znaleziono kontekst z pamięci wektorowej (${memoryContext.length} znaków)`);
+        console.log(`🧠 Używam pamięci wektorowej (${memoryContext.length} znaków)`);
+      } else {
+        console.log(`🤷 Pamięć wektorowa nie znalazła relevant kontekstu`);
       }
-    } catch (error) {
-      console.error('❌ Błąd pobierania kontekstu z pamięci:', error);
     }
-  } else {
-    // Fallback: użyj historii z aktualnego czatu jeśli pamięć wektorowa nie jest gotowa
-    console.log('⚠️ Pamięć wektorowa nie jest gotowa, używam historii czatu');
-    try {
+    
+    // 5. Fallback do historii czatu jeśli nie ma kontekstu z pamięci wektorowej
+    if (!memoryContext && intentAnalysis.useChatHistory && chatHistoryCount > 1) {
       const recentMessages = await prisma.message.findMany({
         where: { chatId },
         orderBy: { createdAt: 'desc' },
-        take: 6, // Ostatnie 6 wiadomości
+        take: 6,
         include: { sender: { select: { username: true } } }
       });
 
-      if (recentMessages.length > 1) { // Więcej niż aktualna wiadomość
+      if (recentMessages.length > 1) {
         const chatHistory = recentMessages
           .reverse()
           .slice(0, -1) // Usuń aktualną wiadomość użytkownika
@@ -432,8 +459,39 @@ Jeśli otrzymasz kontekst z poprzednich rozmów, wykorzystaj te informacje aby u
           console.log(`📜 Używam historii czatu (${memoryContext.length} znaków)`);
         }
       }
-    } catch (error) {
-      console.error('❌ Błąd pobierania historii czatu:', error);
+    }
+
+    // 6. Loguj końcową decyzję
+    if (!memoryContext) {
+      console.log(`🆕 Brak dodatkowego kontekstu - traktuj jako nowe pytanie`);
+    }
+
+  } catch (error) {
+    console.error('❌ Błąd analizy intencji lub pobierania kontekstu:', error);
+    
+    // Emergency fallback - historia czatu jeśli wszystko inne zawiedzie
+    try {
+      const recentMessages = await prisma.message.findMany({
+        where: { chatId },
+        orderBy: { createdAt: 'desc' },
+        take: 4,
+        include: { sender: { select: { username: true } } }
+      });
+
+      if (recentMessages.length > 1) {
+        const chatHistory = recentMessages
+          .reverse()
+          .slice(0, -1)
+          .map(msg => `${(msg.sender as any)?.username || 'AI'}: ${msg.content}`)
+          .join('\n');
+        
+        if (chatHistory) {
+          memoryContext = `Historia z tego czatu:\n\n${chatHistory}`;
+          console.log(`🆘 Emergency fallback - historia czatu (${memoryContext.length} znaków)`);
+        }
+      }
+    } catch (fallbackError) {
+      console.error('❌ Nawet fallback nie zadziałał:', fallbackError);
     }
   }
 
@@ -465,6 +523,10 @@ Jeśli otrzymasz kontekst z poprzednich rozmów, wykorzystaj te informacje aby u
       const model = genAI.getGenerativeModel({
         model: modelName,
         systemInstruction: basicPrompt,
+        generationConfig: {
+          maxOutputTokens: 4000,
+          temperature: 0.7,
+        },
       });
 
       const result = await model.generateContent(fullMessage);
@@ -495,7 +557,7 @@ Jeśli otrzymasz kontekst z poprzednich rozmów, wykorzystaj te informacje aby u
           { role: "user", content: fullMessage },
         ],
         temperature: 0.7,
-        max_tokens: 2000,
+        max_tokens: 4000,
       });
 
       return (
@@ -520,7 +582,7 @@ Jeśli otrzymasz kontekst z poprzednich rozmów, wykorzystaj te informacje aby u
 
       const response = await anthropic.messages.create({
         model: claudeModel,
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: basicPrompt,
         messages: [{ role: "user", content: fullMessage }],
       });
@@ -1188,7 +1250,8 @@ app.put("/api/memory/settings/:userId", async (req: Request, res: Response) => {
     memoryEnabled,
     autoDeleteOnChatRemoval,
     incognitoMode,
-    shareMemoryAcrossChats
+    shareMemoryAcrossChats,
+    memoryAggressiveness
   } = req.body;
 
   try {
@@ -1203,6 +1266,7 @@ app.put("/api/memory/settings/:userId", async (req: Request, res: Response) => {
         ...(autoDeleteOnChatRemoval !== undefined && { autoDeleteOnChatRemoval }),
         ...(incognitoMode !== undefined && { incognitoMode }),
         ...(shareMemoryAcrossChats !== undefined && { shareMemoryAcrossChats }),
+        ...(memoryAggressiveness !== undefined && { memoryAggressiveness }),
         updatedAt: new Date()
       },
       create: {
@@ -1214,7 +1278,8 @@ app.put("/api/memory/settings/:userId", async (req: Request, res: Response) => {
         memoryEnabled: memoryEnabled !== undefined ? memoryEnabled : true,
         autoDeleteOnChatRemoval: autoDeleteOnChatRemoval !== undefined ? autoDeleteOnChatRemoval : true,
         incognitoMode: incognitoMode !== undefined ? incognitoMode : false,
-        shareMemoryAcrossChats: shareMemoryAcrossChats !== undefined ? shareMemoryAcrossChats : true
+        shareMemoryAcrossChats: shareMemoryAcrossChats !== undefined ? shareMemoryAcrossChats : true,
+        memoryAggressiveness: memoryAggressiveness || 'conservative'
       }
     });
 
