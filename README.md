@@ -35,6 +35,15 @@ MyLLM Chat to nowoczesna aplikacja webowa umożliwiająca konwersacje z różnym
 - Automatyczne generowanie tytułów czatów
 - Sidebar z listą ostatnich rozmów
 
+### 🧠 Pamięć wektorowa (NOWOŚĆ!)
+
+- **Inteligentna pamięć między rozmowami** - AI pamięta informacje z poprzednich czatów
+- **Semantyczne wyszukiwanie** - znajdowanie podobnych tematów z historii
+- **Automatyczna ocena ważności** - zapisywanie tylko istotnych informacji
+- **Inteligentna analiza intencji** - rozróżnianie kontynuacji tematu od odwołań do przeszłości
+- **Konfigurowane ustawienia prywatności** - pełna kontrola nad tym co jest zapisywane
+- **Tryb incognito** - rozmowy bez zapisywania do pamięci
+
 ### 📎 Obsługa plików
 
 - Przesyłanie i analiza dokumentów (PDF, DOCX, XLSX)
@@ -86,6 +95,7 @@ MyLLM Chat to nowoczesna aplikacja webowa umożliwiająca konwersacje z różnym
 - **@google/generative-ai** - Google Gemini
 - **openai** - OpenAI GPT
 - **@anthropic-ai/sdk** - Anthropic Claude
+- **@xenova/transformers** - lokalne generowanie embeddings dla pamięci wektorowej
 
 ### Obsługa plików
 
@@ -215,8 +225,13 @@ myllm-chat/
 │   └── package.json
 ├── server/                # Backend Node.js
 │   ├── src/
-│   │   ├── api/           # Endpointy API
-│   │   └── utils/         # Utilities (obsługa plików)
+│   │   ├── services/      # Serwisy (pamięć wektorowa, analiza intencji)
+│   │   │   ├── VectorMemoryService.ts    # Główny serwis pamięci
+│   │   │   ├── EmbeddingsService.ts      # Generowanie embeddings
+│   │   │   ├── ImportanceScorer.ts       # Ocena ważności wiadomości
+│   │   │   └── IntentAnalyzer.ts         # Analiza intencji użytkownika
+│   │   ├── utils/         # Utilities (obsługa plików)
+│   │   └── server.ts      # Główny plik serwera
 │   ├── prisma/            # Schema i migracje bazy
 │   ├── uploads/           # Przesłane pliki
 │   └── package.json
@@ -240,8 +255,28 @@ myllm-chat/
 ### Zarządzanie rozmowami
 
 - **Usuwanie**: Najedź na czat w sidebarze i kliknij ikonę kosza
-- **Kopiowanie**: Kliknij "Kopiuj" przy każdej wiadomości
+- **Kopiowanie**: Kliknij "Kopiuj" przy każdej wiadomości  
 - **Zmiana modelu**: Użyj listy rozwijanej w obszarze czatu
+
+### 🧠 Konfiguracja pamięci wektorowej
+
+1. **Ustawienia podstawowe** - dostęp przez API `GET/PUT /api/memory/settings/:userId`
+2. **Poziomy agresywności pamięci**:
+   - `conservative` (domyślny) - pamięć tylko przy wyraźnych odwołaniach
+   - `moderate` - pamięć przy dwuznacznych sytuacjach
+   - `aggressive` - pamięć zawsze aktywna
+3. **Opcje prywatności**:
+   - Wyłączenie pamięci (`memoryEnabled: false`)
+   - Tryb incognito (`incognitoMode: true`)
+   - Ograniczenie do pojedynczych czatów (`shareMemoryAcrossChats: false`)
+
+### 📊 API pamięci wektorowej
+
+- `POST /api/memory/search` - wyszukiwanie w pamięci
+- `DELETE /api/memory/cleanup/:userId` - czyszczenie starych wpisów
+- `DELETE /api/memory/chat/:chatId` - usuwanie pamięci czatu
+- `GET /api/memory/stats/:userId` - statystyki pamięci
+- `POST /api/memory/validate/:userId` - weryfikacja spójności
 
 ## 🐛 Rozwiązywanie problemów
 
@@ -251,6 +286,20 @@ myllm-chat/
 cd server
 npx prisma db push
 npx prisma generate
+```
+
+### Problem z pamięcią wektorową
+
+```bash
+# Jeśli pamięć wektorowa nie działa, sprawdź inicjalizację
+# Model embeddings pobiera się przy pierwszym uruchomieniu (~50MB)
+# Sprawdź logi serwera w poszukiwaniu błędów inicjalizacji
+
+# Weryfikacja spójności pamięci
+curl -X POST http://localhost:3001/api/memory/validate/USER_ID
+
+# Statystyki pamięci
+curl http://localhost:3001/api/memory/stats/USER_ID
 ```
 
 ### Problem z TypeScript
@@ -300,14 +349,23 @@ MyLLM Chat rozwiązuje te problemy oferując:
 
 ## 🎯 Roadmapa
 
+### ✅ Zrealizowane
+- [x] **Pamięć wektorowa** - inteligentna pamięć między rozmowami
+- [x] **Analiza intencji** - rozróżnianie kontynuacji od odwołań do przeszłości  
+- [x] **Zarządzanie pamięcią** - konfiguracja prywatności i agresywności
+- [x] **Synchronizacja danych** - automatyczne czyszczenie przy usuwaniu czatów
+
+### 🔄 W planach
+- [ ] **Interface pamięci** - panel zarządzania pamięcią w UI
 - [ ] **Docker** - konteneryzacja aplikacji
 - [ ] **Streaming odpowiedzi** - real-time streaming od AI
-- [ ] **Export rozmów** - PDF/JSON/Markdown
-- [ ] **Wyszukiwanie** w historii czatów
+- [ ] **Export rozmów** - PDF/JSON/Markdown (z opcją exportu pamięci)
+- [ ] **Wyszukiwanie semantyczne** - wyszukiwarka w historii i pamięci
 - [ ] **Ciemny motyw** - przełącznik day/night mode
 - [ ] **Wtyczki** - system rozszerzeń
 - [ ] **API własne** - RESTful API dla integracji
 - [ ] **Więcej modeli** - Cohere, Mistral, Llama
+- [ ] **Pamięć współdzielona** - opcja dzielenia pamięci między użytkownikami (zespoły)
 
 ---
 
