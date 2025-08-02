@@ -72,12 +72,39 @@ coverage/
 test-output/
 junit.xml
 
-# Ignore build artifacts
+# Electron & Desktop App Build Outputs
+electron/release/          # Built installers and packages
+electron/dist-electron/     # Electron builder temp files
+electron/app/              # Packaged app directory  
+electron/out/              # Additional build outputs
+
+# Installer Files (all platforms)
+*.exe                      # Windows executables
+*.msi                      # Windows MSI packages
+*.dmg                      # macOS disk images
+*.pkg                      # macOS packages
+*.deb                      # Debian/Ubuntu packages
+*.rpm                      # RedHat/CentOS packages
+*.AppImage                 # Linux AppImage
+*.snap                     # Snap packages
+*.tar.gz                   # Linux tarballs
+*.zip                      # Zip archives
+
+# Platform-specific build artifacts
 *.out
 *.o
 *.a
 *.so
-*.exe
+
+# Electron Builder temp files
+.electron-builder-cache/
+electron-builder-*.log
+
+# Code signing files
+*.p12
+*.cer
+*.crt
+*.pem
 
 # Ignore Mac system files
 ._*

@@ -45,144 +45,29 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // --- API Endpoints ---
 
-// Endpoint logowania użytkownika
-app.post("/api/users/login", async (req: Request, res: Response) => {
-  const { username, password } = req.body;
+// AUTH ENDPOINTS REMOVED FOR SINGLE USER MODE
+// No login/register needed - app works with single local user
 
-  console.log("🔐 Próba logowania:", { username, password });
+// Single User Mode - hardcoded user ID
+const SINGLE_USER_ID = "single-user";
 
-  if (!username || !password) {
-    console.log("❌ Brak username lub password");
-    return res
-      .status(400)
-      .json({ error: "Username and password are required" });
-  }
-
-  try {
-    // Sprawdź wszystkich użytkowników w bazie
-    const allUsers = await prisma.user.findMany({
-      select: { id: true, username: true },
-    });
-    console.log("👥 Wszyscy użytkownicy w bazie:", allUsers);
-
-    // Znajdź użytkownika po nazwie użytkownika
-    const user = await prisma.user.findUnique({
-      where: { username },
-      select: { id: true, username: true, passwordHash: true },
-    });
-
-    console.log("🔍 Znaleziony użytkownik:", user);
-
-    if (!user) {
-      console.log("❌ Użytkownik nie znaleziony");
-      return res.status(401).json({ error: "Invalid username or password" });
-    }
-
-    // Sprawdź hasło
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-
-    if (!isPasswordValid) {
-      console.log("❌ Nieprawidłowe hasło");
-      return res.status(401).json({ error: "Invalid username or password" });
-    }
-
-    console.log("✅ Logowanie udane");
-    res.json({ id: user.id, username: user.username });
-  } catch (error) {
-    console.error("💥 Error during login:", error);
-    res.status(500).json({ error: "Could not process login" });
-  }
-});
-
-// Endpoint rejestracji użytkownika
-app.post("/api/users/register", async (req: Request, res: Response) => {
-  const { username, password } = req.body;
-
-  console.log("📝 Próba rejestracji:", { username });
-
-  if (!username || !password) {
-    console.log("❌ Brak username lub password");
-    return res
-      .status(400)
-      .json({ error: "Username and password are required" });
-  }
-
-  if (password.length < 6) {
-    console.log("❌ Hasło za krótkie");
-    return res
-      .status(400)
-      .json({ error: "Password must be at least 6 characters long" });
-  }
-
-  try {
-    // Sprawdź czy użytkownik już istnieje
-    const existingUser = await prisma.user.findUnique({
-      where: { username },
-    });
-
-    if (existingUser) {
-      console.log("❌ Użytkownik już istnieje");
-      return res.status(409).json({ error: "Username already exists" });
-    }
-
-    // Zahashuj hasło
-    const saltRounds = 10;
-    const passwordHash = await bcrypt.hash(password, saltRounds);
-
-    // Utwórz nowego użytkownika
-    const newUser = await prisma.user.create({
-      data: {
-        username,
-        passwordHash,
-      },
-      select: {
-        id: true,
-        username: true,
-        createdAt: true,
-      },
-    });
-
-    console.log("✅ Rejestracja udana:", newUser);
-    res.status(201).json(newUser);
-  } catch (error) {
-    console.error("💥 Error during registration:", error);
-    res.status(500).json({ error: "Could not process registration" });
-  }
-});
-
-// Pobierz listę czatów dla zalogowanego użytkownika
+// Pobierz listę czatów dla użytkownika (single user mode)
 app.get("/api/chats", async (req: Request, res: Response) => {
-  // Pobierz ID użytkownika z query parametru lub headera
-  const loggedInUserId =
-    (req.query.userId as string) || (req.headers["user-id"] as string);
-
-  if (!loggedInUserId) {
-    return res.status(401).json({ error: "User ID is required" });
-  }
+  // Use hardcoded single user ID
+  const loggedInUserId = SINGLE_USER_ID;
 
   try {
-    const userChatParticipants = await prisma.chatParticipant.findMany({
-      where: { userId: loggedInUserId },
-      orderBy: { chat: { updatedAt: "desc" } },
+    const chats = await prisma.chat.findMany({
+      orderBy: { updatedAt: "desc" },
       include: {
-        chat: {
-          include: {
-            participants: {
-              include: {
-                user: { select: { id: true, username: true } },
-              },
-            },
-            messages: {
-              orderBy: { createdAt: "desc" },
-              take: 1,
-            },
-          },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
         },
       },
     });
 
-    const chats = userChatParticipants.map((p) => {
-      const chat = p.chat as any; // Rzutowanie typu, aby uzyskać dostęp do pól title i metadata
+    const chatList = chats.map((chat) => {
       const lastMessage = chat.messages[0];
       const metadata = chat.metadata as any;
 
@@ -193,14 +78,14 @@ app.get("/api/chats", async (req: Request, res: Response) => {
         lastMessageTime: lastMessage?.createdAt || chat.createdAt,
         messageCount: chat.messages.length,
         modelId: metadata?.modelId || "unknown",
-        userId: loggedInUserId,
+        userId: loggedInUserId, // Keep for frontend compatibility
         isAIChat: metadata?.isAIChat || false,
         createdAt: chat.createdAt,
         updatedAt: chat.updatedAt,
       };
     });
 
-    res.json(chats);
+    res.json(chatList);
   } catch (error) {
     console.error("Error fetching chats:", error);
     res.status(500).json({ error: "Could not fetch chats" });
@@ -213,15 +98,23 @@ app.get("/api/chats/:chatId/messages", async (req: Request, res: Response) => {
   const { cursor } = req.query; // Dla paginacji (ID ostatniej wiadomości)
 
   try {
-    // TODO: W prawdziwej aplikacji sprawdź, czy użytkownik ma dostęp do tego czatu
     const messages = await prisma.message.findMany({
       where: { chatId },
       take: 30,
       ...(cursor && { skip: 1, cursor: { id: String(cursor) } }),
       orderBy: { createdAt: "desc" },
-      include: { sender: { select: { id: true, username: true } } },
     });
-    res.json(messages.reverse());
+    
+    // Transform messages to include sender info for frontend compatibility
+    const transformedMessages = messages.map(message => ({
+      ...message,
+      sender: {
+        id: message.senderType === "user" ? SINGLE_USER_ID : "ai-assistant",
+        username: message.senderType === "user" ? "User" : "AI"
+      }
+    }));
+    
+    res.json(transformedMessages.reverse());
   } catch (error) {
     console.error("Error fetching messages:", error);
     res.status(500).json({ error: "Could not fetch messages" });
@@ -230,11 +123,11 @@ app.get("/api/chats/:chatId/messages", async (req: Request, res: Response) => {
 
 // Endpoint do tworzenia nowego czatu AI
 app.post("/api/ai/chats", async (req: Request, res: Response) => {
-  const { userId, title, modelId } = req.body;
+  const { title, modelId } = req.body; // userId no longer needed
 
-  if (!userId || !title || !modelId) {
+  if (!title || !modelId) {
     return res.status(400).json({
-      error: "userId, title i modelId są wymagane",
+      error: "title i modelId są wymagane",
     });
   }
 
@@ -243,12 +136,6 @@ app.post("/api/ai/chats", async (req: Request, res: Response) => {
     const newChat = await prisma.chat.create({
       data: {
         title,
-        participants: {
-          create: [
-            { userId },
-            { userId: "ai-assistant" }, // Specjalny ID dla AI
-          ],
-        },
         // Dodaj metadane czatu AI
         metadata: {
           modelId,
@@ -256,11 +143,6 @@ app.post("/api/ai/chats", async (req: Request, res: Response) => {
         },
       } as any, // Rzutowanie typu dla pól title i metadata
       include: {
-        participants: {
-          include: {
-            user: { select: { id: true, username: true } },
-          },
-        },
         messages: {
           orderBy: { createdAt: "desc" },
           take: 1,
@@ -279,40 +161,28 @@ app.post("/api/ai/chats", async (req: Request, res: Response) => {
 // Endpoint do usuwania czatu
 app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
   const { chatId } = req.params;
-  const { userId } = req.body;
-
-  if (!userId) {
-    return res.status(400).json({ error: "userId jest wymagany" });
-  }
 
   try {
-    // Sprawdź czy czat istnieje i czy użytkownik ma do niego dostęp
+    // Sprawdź czy czat istnieje
     const chat = await prisma.chat.findFirst({
-      where: {
-        id: chatId,
-        participants: {
-          some: { userId: userId },
-        },
-      },
+      where: { id: chatId },
     });
 
     if (!chat) {
       return res
         .status(404)
-        .json({ error: "Czat nie został znaleziony lub brak dostępu" });
+        .json({ error: "Czat nie został znaleziony" });
     }
 
     // Sprawdź czy użytkownik chce automatycznie usuwać pamięć
     let memoryDeletedCount = 0;
     if (vectorMemoryService.isReady()) {
       try {
-        const userSettings = await prisma.memorySettings.findUnique({
-          where: { userId }
-        });
+        const userSettings = await prisma.memorySettings.findFirst();
         
         if (userSettings?.autoDeleteOnChatRemoval !== false) {
           // Domyślnie usuń pamięć (chyba że użytkownik wyłączył)
-          memoryDeletedCount = await vectorMemoryService.deleteMemoryByChat(chatId, userId);
+          memoryDeletedCount = await vectorMemoryService.deleteMemoryByChat(chatId, SINGLE_USER_ID);
           console.log(`🗑️ Automatycznie usunięto pamięć czatu (ustawienie: ${userSettings?.autoDeleteOnChatRemoval})`);
         } else {
           console.log(`🔒 Zachowano pamięć czatu (ustawienie użytkownika)`);
@@ -325,11 +195,6 @@ app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
 
     // Usuń wszystkie wiadomości z czatu
     await prisma.message.deleteMany({
-      where: { chatId },
-    });
-
-    // Usuń wszystkich uczestników czatu
-    await prisma.chatParticipant.deleteMany({
       where: { chatId },
     });
 
@@ -726,7 +591,7 @@ app.post("/api/files/upload", (req: Request, res: Response) => {
       const tempMessage = await prisma.message.create({
         data: {
           content: `[TEMP_ATTACHMENT_${Date.now()}]`,
-          senderId: userId,
+          senderType: "user",
           chatId: tempChat.id,
         },
       });
@@ -852,9 +717,6 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       const newChat = await prisma.chat.create({
         data: {
           title: chatTitle,
-          participants: {
-            create: [{ userId }, { userId: "ai-assistant" }],
-          },
           metadata: {
             modelId,
             isAIChat: true,
@@ -870,7 +732,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     const userMessageRecord = await prisma.message.create({
       data: {
         content: userMessage,
-        senderId: userId,
+        senderType: "user",
         chatId: currentChatId,
       },
     });
@@ -959,7 +821,7 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
     const aiMessageRecord = await prisma.message.create({
       data: {
         content: aiResponse,
-        senderId: "ai-assistant",
+        senderType: "ai",
         chatId: currentChatId,
       },
     });
@@ -1286,19 +1148,15 @@ app.post("/api/memory/validate/:userId", async (req: Request, res: Response) => 
   }
 });
 
-// Endpoint do ustawień pamięci użytkownika
-app.get("/api/memory/settings/:userId", async (req: Request, res: Response) => {
-  const { userId } = req.params;
-
+// Endpoint do ustawień pamięci użytkownika (single user mode)
+app.get("/api/memory/settings", async (req: Request, res: Response) => {
   try {
-    let settings = await prisma.memorySettings.findUnique({
-      where: { userId }
-    });
+    let settings = await prisma.memorySettings.findFirst();
 
     if (!settings) {
       // Utwórz domyślne ustawienia
       settings = await prisma.memorySettings.create({
-        data: { userId }
+        data: {}
       });
     }
 
@@ -1309,9 +1167,8 @@ app.get("/api/memory/settings/:userId", async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint do aktualizacji ustawień pamięci (rozszerzony)
-app.put("/api/memory/settings/:userId", async (req: Request, res: Response) => {
-  const { userId } = req.params;
+// Endpoint do aktualizacji ustawień pamięci (single user mode)
+app.put("/api/memory/settings", async (req: Request, res: Response) => {
   const { 
     importanceThreshold, 
     maxMemoryEntries, 
@@ -1325,35 +1182,44 @@ app.put("/api/memory/settings/:userId", async (req: Request, res: Response) => {
   } = req.body;
 
   try {
-    const settings = await prisma.memorySettings.upsert({
-      where: { userId },
-      update: {
-        ...(importanceThreshold !== undefined && { importanceThreshold }),
-        ...(maxMemoryEntries !== undefined && { maxMemoryEntries }),
-        ...(retentionDays !== undefined && { retentionDays }),
-        ...(autoCleanupEnabled !== undefined && { autoCleanupEnabled }),
-        ...(memoryEnabled !== undefined && { memoryEnabled }),
-        ...(autoDeleteOnChatRemoval !== undefined && { autoDeleteOnChatRemoval }),
-        ...(incognitoMode !== undefined && { incognitoMode }),
-        ...(shareMemoryAcrossChats !== undefined && { shareMemoryAcrossChats }),
-        ...(memoryAggressiveness !== undefined && { memoryAggressiveness }),
-        updatedAt: new Date()
-      },
-      create: {
-        userId,
-        importanceThreshold: importanceThreshold || 0.3,
-        maxMemoryEntries: maxMemoryEntries || 10000,
-        retentionDays: retentionDays || 365,
-        autoCleanupEnabled: autoCleanupEnabled !== undefined ? autoCleanupEnabled : true,
-        memoryEnabled: memoryEnabled !== undefined ? memoryEnabled : true,
-        autoDeleteOnChatRemoval: autoDeleteOnChatRemoval !== undefined ? autoDeleteOnChatRemoval : true,
-        incognitoMode: incognitoMode !== undefined ? incognitoMode : false,
-        shareMemoryAcrossChats: shareMemoryAcrossChats !== undefined ? shareMemoryAcrossChats : true,
-        memoryAggressiveness: memoryAggressiveness || 'conservative'
-      }
-    });
+    // Find existing settings or create new ones
+    let settings = await prisma.memorySettings.findFirst();
+    
+    if (settings) {
+      // Update existing settings
+      settings = await prisma.memorySettings.update({
+        where: { id: settings.id },
+        data: {
+          ...(importanceThreshold !== undefined && { importanceThreshold }),
+          ...(maxMemoryEntries !== undefined && { maxMemoryEntries }),
+          ...(retentionDays !== undefined && { retentionDays }),
+          ...(autoCleanupEnabled !== undefined && { autoCleanupEnabled }),
+          ...(memoryEnabled !== undefined && { memoryEnabled }),
+          ...(autoDeleteOnChatRemoval !== undefined && { autoDeleteOnChatRemoval }),
+          ...(incognitoMode !== undefined && { incognitoMode }),
+          ...(shareMemoryAcrossChats !== undefined && { shareMemoryAcrossChats }),
+          ...(memoryAggressiveness !== undefined && { memoryAggressiveness }),
+          updatedAt: new Date()
+        }
+      });
+    } else {
+      // Create new settings
+      settings = await prisma.memorySettings.create({
+        data: {
+          importanceThreshold: importanceThreshold || 0.3,
+          maxMemoryEntries: maxMemoryEntries || 10000,
+          retentionDays: retentionDays || 365,
+          autoCleanupEnabled: autoCleanupEnabled !== undefined ? autoCleanupEnabled : true,
+          memoryEnabled: memoryEnabled !== undefined ? memoryEnabled : true,
+          autoDeleteOnChatRemoval: autoDeleteOnChatRemoval !== undefined ? autoDeleteOnChatRemoval : true,
+          incognitoMode: incognitoMode !== undefined ? incognitoMode : false,
+          shareMemoryAcrossChats: shareMemoryAcrossChats !== undefined ? shareMemoryAcrossChats : true,
+          memoryAggressiveness: memoryAggressiveness || 'conservative'
+        }
+      });
+    }
 
-    console.log(`⚙️ Zaktualizowano ustawienia pamięci dla użytkownika ${userId}`);
+    console.log(`⚙️ Zaktualizowano ustawienia pamięci`);
     res.json(settings);
   } catch (error) {
     console.error("❌ Błąd aktualizacji ustawień pamięci:", error);

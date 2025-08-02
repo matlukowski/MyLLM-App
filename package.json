@@ -1,17 +1,41 @@
 {
-  "name": "chatgpt clone",
+  "name": "myllm-chat",
+  "version": "1.0.0",
+  "description": "MyLLM Chat - AI Chat Application with Desktop Support",
   "private": true,
   "workspaces": [
     "client",
-    "server"
+    "server",
+    "electron"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=client\" \"npm run dev --workspace=server\""
+    "dev": "concurrently \"npm run dev --workspace=client\" \"npm run dev --workspace=server\"",
+    "dev:electron": "concurrently \"npm run dev --workspace=client\" \"npm run dev --workspace=server\" \"npm run dev --workspace=electron\"",
+    "build": "npm run build --workspace=client && npm run build --workspace=server",
+    "build:electron": "npm run build && npm run build --workspace=electron",
+    "electron:dev": "npm run build:electron && npm run start --workspace=electron",
+    "electron:dist": "npm run build:electron && npm run dist --workspace=electron",
+    "electron:dist:win": "npm run build:electron && npm run dist:win --workspace=electron",
+    "electron:dist:mac": "npm run build:electron && npm run dist:mac --workspace=electron",
+    "electron:dist:linux": "npm run build:electron && npm run dist:linux --workspace=electron",
+    "electron:pack": "npm run build:electron && npm run pack --workspace=electron",
+    "release:build:all": "npm run build:electron && npm run dist --workspace=electron",
+    "release:build:win": "npm run build:electron && npm run dist:win --workspace=electron",
+    "release:build:mac": "npm run build:electron && npm run dist:mac --workspace=electron",
+    "release:clean": "rimraf electron/release electron/dist electron/app client/dist server/dist",
+    "release:test": "npm run build && echo 'Build test successful - ready for release'"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "cross-env": "^10.0.0",
+    "rimraf": "^5.0.5"
   },
   "dependencies": {
+    "onnxruntime-node": "^1.22.0-rev",
     "react-icons": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   }
 }

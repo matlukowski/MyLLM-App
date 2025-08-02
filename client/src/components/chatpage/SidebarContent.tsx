@@ -2,7 +2,6 @@ import React, { useState, useImperativeHandle, forwardRef } from "react";
 import {
   Box,
   Flex,
-  Heading,
   Text,
   VStack,
   Button,
@@ -11,21 +10,19 @@ import {
   HStack,
 } from "@chakra-ui/react";
 import {
-  HiArrowRightOnRectangle,
-  HiOutlineSparkles,
   HiOutlinePlus,
   HiOutlineChatBubbleLeftRight,
-  HiOutlineEllipsisVertical,
   HiOutlineCog6Tooth,
   HiOutlineTrash,
 } from "react-icons/hi2";
-import { useAuth } from "../../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
 import { Chat, getLLMModel } from "../../types/types";
 import DeleteChatModal from "../ui/DeleteChatModal";
 import { useEffect } from "react";
 import { getChats, deleteChatById } from "../../../../server/src/api/chatApi";
 import { toast } from "react-toastify";
+
+// Single User Mode - hardcoded user ID
+const SINGLE_USER_ID = "single-user";
 
 interface SidebarContentProps {
   activeChatId: string | null;
@@ -51,8 +48,7 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
     },
     ref
   ) => {
-    const { user, logout } = useAuth();
-    const navigate = useNavigate();
+    // No auth needed in single user mode
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [chatToDelete, setChatToDelete] = useState<Chat | null>(null);
     const [isDeletingChat, setIsDeletingChat] = useState(false);
@@ -63,11 +59,9 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
 
     useEffect(() => {
       const loadChats = async () => {
-        if (!user?.id) return;
-
         try {
           setIsLoadingChats(true);
-          const fetchedChats = await getChats(user.id);
+          const fetchedChats = await getChats(SINGLE_USER_ID);
 
           // Konwertuj daty z stringów na obiekty Date
           const chatsWithDates = fetchedChats.map((chat: any) => ({
@@ -86,12 +80,9 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
       };
 
       loadChats();
-    }, [user?.id]);
+    }, []);
 
-    const handleLogout = () => {
-      logout();
-      navigate("/auth");
-    };
+    // No logout needed in single user mode
 
     const handleChatSelect = (chatId: string) => {
       onChatSelect(chatId); // Użyj callbacka zamiast bezpośredniego ustawiania stanu
@@ -104,10 +95,8 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
 
     // Funkcja do odświeżania listy czatów (można wywołać po utworzeniu nowego czatu)
     const refreshChats = async () => {
-      if (!user?.id) return;
-
       try {
-        const fetchedChats = await getChats(user.id);
+        const fetchedChats = await getChats(SINGLE_USER_ID);
         const chatsWithDates = fetchedChats.map((chat: any) => ({
           ...chat,
           lastMessageTime: new Date(chat.lastMessageTime),
@@ -140,11 +129,11 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
 
     // Funkcja do potwierdzenia usunięcia czatu
     const handleConfirmDelete = async () => {
-      if (!chatToDelete || !user?.id) return;
+      if (!chatToDelete) return;
 
       setIsDeletingChat(true);
       try {
-        await deleteChatById(chatToDelete.id, user.id);
+        await deleteChatById(chatToDelete.id, SINGLE_USER_ID);
 
         // Usuń czat z lokalnej listy
         setChats(chats.filter((chat) => chat.id !== chatToDelete.id));
@@ -389,66 +378,38 @@ const SidebarContent = forwardRef<SidebarContentRef, SidebarContentProps>(
             )}
           </VStack>
 
-          {/* Footer z informacjami o użytkowniku */}
+          {/* Footer z ustawieniami */}
           <Box p={4} borderTop="1px solid" borderColor="gray.700">
-            <VStack gap={3}>
-              <HStack w="full" justify="space-between">
-                <VStack align="start" gap={0} flex={1}>
-                  <Text fontSize="sm" fontWeight="500" color="white">
-                    {user?.username}
-                  </Text>
-                  <Text fontSize="xs" color="gray.400">
-                    Zalogowany
-                  </Text>
-                </VStack>
-
+            <HStack w="full" justify="center">
+              <Button
+                onClick={onApiKeysOpen}
+                size="sm"
+                bg="transparent"
+                color="gray.400"
+                border="1px solid"
+                borderColor="gray.600"
+                minW="auto"
+                h="auto"
+                px={4}
+                py={2}
+                _hover={{
+                  color: "white",
+                  bg: "gray.800",
+                  borderColor: "gray.500",
+                }}
+                _active={{
+                  transform: "scale(0.95)",
+                }}
+                transition="all 0.2s ease"
+                title="Konfiguruj klucze API"
+                borderRadius="6px"
+              >
                 <HStack gap={2}>
-                  <Button
-                    onClick={onApiKeysOpen}
-                    size="sm"
-                    bg="transparent"
-                    color="gray.400"
-                    border="none"
-                    minW="auto"
-                    h="auto"
-                    p={2}
-                    _hover={{
-                      color: "white",
-                      bg: "gray.800",
-                    }}
-                    _active={{
-                      transform: "scale(0.95)",
-                    }}
-                    transition="all 0.2s ease"
-                    title="Konfiguruj klucze API"
-                  >
-                    <Icon as={HiOutlineCog6Tooth} boxSize={4} />
-                  </Button>
-
-                  <Button
-                    onClick={handleLogout}
-                    size="sm"
-                    bg="transparent"
-                    color="gray.400"
-                    border="none"
-                    minW="auto"
-                    h="auto"
-                    p={2}
-                    _hover={{
-                      color: "white",
-                      bg: "gray.800",
-                    }}
-                    _active={{
-                      transform: "scale(0.95)",
-                    }}
-                    transition="all 0.2s ease"
-                    title="Wyloguj się"
-                  >
-                    <Icon as={HiArrowRightOnRectangle} boxSize={4} />
-                  </Button>
+                  <Icon as={HiOutlineCog6Tooth} boxSize={4} />
+                  <Text fontSize="sm">Ustawienia</Text>
                 </HStack>
-              </HStack>
-            </VStack>
+              </Button>
+            </HStack>
           </Box>
         </Flex>
 

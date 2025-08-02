@@ -29,7 +29,8 @@ const fadeIn = keyframes`
     transform: translateY(0);
   }
 `;
-import { useAuth } from "../../contexts/AuthContext";
+// Single User Mode - hardcoded user ID
+const SINGLE_USER_ID = "single-user";
 import {
   HiOutlinePaperAirplane,
   HiOutlineUser,
@@ -76,7 +77,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
   );
   const [chatTitle, setChatTitle] = useState<string>("");
   const [isJustCreated, setIsJustCreated] = useState(false); // Flaga dla świeżo utworzonych czatów
-  const { user } = useAuth();
+  // No auth needed in single user mode
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -224,7 +225,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     // Prześlij pliki jeśli są jakieś
     let uploadedFiles: any[] = [];
     if (files.length > 0) {
-      const uploadResult = await uploadFiles(user.id);
+      const uploadResult = await uploadFiles(SINGLE_USER_ID);
       if (!uploadResult.success) {
         setError("Nie udało się przesłać niektórych plików. Spróbuj ponownie.");
         setIsSending(false);
@@ -302,7 +303,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: user.id,
+          userId: SINGLE_USER_ID,
           modelId: selectedModel,
           userMessage: userMessageContent,
           chatId: isNewChat ? null : chatId,

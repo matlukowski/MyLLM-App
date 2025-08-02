@@ -3,21 +3,12 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./single_user.db"
 }
 
-model User {
-  id             String            @id @default(cuid())
-  username       String            @unique
-  passwordHash   String
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-
-  sentMessages   Message[]         @relation("SentMessages")
-  chatParticipants ChatParticipant[]
-  memorySettings MemorySettings?
-}
+// User model removed for single user mode
+// All data belongs to the single local user
 
 model Chat {
   id           String            @id @default(cuid())
@@ -27,32 +18,22 @@ model Chat {
   updatedAt    DateTime          @updatedAt
 
   messages     Message[]
-  participants ChatParticipant[]
 }
 
-model ChatParticipant {
-  id     String @id @default(cuid())
-  userId String
-  chatId String
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, chatId])
-}
+// ChatParticipant model removed for single user mode
+// All chats belong to the single local user
 
 model Message {
   id        String   @id @default(cuid())
   content   String
   createdAt DateTime @default(now())
+  
+  // Store sender as simple string instead of foreign key
+  senderType String  // "user" or "ai"
+  chatId     String
 
-  senderId  String
-  chatId    String
-
-  sender User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
-  // 👇 --- DODANE ---
   // Relacja wskazująca, że wiadomość może mieć wiele załączników.
   attachments Attachment[]
 }
@@ -77,31 +58,28 @@ model Attachment {
 model VectorMemory {
   id              String   @id @default(cuid())
   content         String   // Oryginalny tekst wiadomości
-  embedding       Float[]  // Wektor embeddings (PostgreSQL wspiera array)
+  embedding       String   // Wektor embeddings (stored as JSON string for SQLite)
   importanceScore Float    @default(0.5) // Ocena ważności 0-1
   timestamp       DateTime @default(now())
   
-  // Relacje
-  userId          String
+  // Relacje (no userId needed for single user mode)
   chatId          String
   messageId       String?  // Opcjonalne - może być null dla zagregowanych wspomnień
   
   // Kontekst i metadane
   context         String?  // Kilka poprzednich wiadomości jako kontekst
-  tags            String[] // Automatycznie generowane tagi
-  metadata        Json?    // Dodatkowe metadane (model użyty, typ interakcji, itp.)
+  tags            String   // Automatycznie generowane tagi (stored as JSON string)
+  metadata        String?  // Dodatkowe metadane (stored as JSON string)
   
   // Indeksy dla wydajności
-  @@index([userId])
   @@index([chatId])  
   @@index([timestamp])
   @@index([importanceScore])
 }
 
-// Tabela do przechowywania konfiguracji użytkownika dla pamięci
+// Tabela do przechowywania konfiguracji użytkownika dla pamięci (single user)
 model MemorySettings {
   id                    String  @id @default(cuid())
-  userId                String  @unique
   importanceThreshold   Float   @default(0.3) // Próg ważności dla zapisywania
   maxMemoryEntries      Int     @default(10000) // Maksymalna liczba wpisów
   retentionDays         Int     @default(365) // Ile dni przechowywać wpisy
@@ -116,6 +94,4 @@ model MemorySettings {
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

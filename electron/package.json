@@ -1,0 +1,182 @@
+{
+  "name": "myllm-chat-desktop",
+  "version": "1.0.0",
+  "description": "MyLLM Chat - Desktop Application",
+  "main": "dist/main.js",
+  "author": "MyLLM Chat Team",
+  "license": "MIT",
+  "private": true,
+  "homepage": "./",
+  "scripts": {
+    "dev": "concurrently \"npm run build:watch\" \"npm run start:dev\"",
+    "build": "tsc && npm run copy-assets",
+    "build:watch": "tsc --watch",
+    "start:dev": "wait-on dist/main.js && set NODE_ENV=development && electron dist/main.js",
+    "start": "electron dist/main.js",
+    "copy-assets": "copyfiles -u 1 \"src/assets/**/*\" dist/",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "pack": "npm run build && electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.myllm.chat",
+    "productName": "MyLLM Chat",
+    "copyright": "Copyright © 2025 MyLLM Chat Team",
+    "compression": "maximum",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "your-username",
+      "repo": "myllm-chat"
+    },
+    "extraResources": [
+      {
+        "from": "../client/dist",
+        "to": "client",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../server/dist",
+        "to": "server",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../server/node_modules",
+        "to": "server/node_modules",
+        "filter": [
+          "**/*",
+          "!**/.cache/**/*"
+        ]
+      },
+      {
+        "from": "../server/prisma",
+        "to": "server/prisma",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../server/package.json",
+        "to": "server/package.json"
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "msi",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "publisherName": "MyLLM Chat Team"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MyLLM Chat",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "pkg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.plist",
+      "entitlementsInherit": "build/entitlements.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "This app may access camera for file uploads",
+        "NSMicrophoneUsageDescription": "This app may access microphone for voice features"
+      }
+    },
+    "dmg": {
+      "title": "MyLLM Chat ${version}",
+      "artifactName": "MyLLM-Chat-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Office",
+      "artifactName": "${productName}-${version}.${ext}",
+      "synopsis": "AI Chat Application with Multiple Model Support",
+      "description": "Modern AI chat application supporting OpenAI, Google Gemini, and Anthropic Claude with your own API keys.",
+      "desktop": {
+        "Name": "MyLLM Chat",
+        "Comment": "Chat with AI using your own API keys",
+        "Categories": "Office;Network;Chat;",
+        "Keywords": "ai;chat;openai;gemini;claude;llm;"
+      }
+    }
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "find-free-port": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "concurrently": "^8.2.2",
+    "copyfiles": "^2.4.1",
+    "cross-env": "^10.0.0",
+    "electron": "32.2.7",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.3.3",
+    "wait-on": "^7.2.0"
+  }
+}

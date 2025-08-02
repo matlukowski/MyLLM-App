@@ -11,7 +11,6 @@ import {
   Icon,
   IconButton,
 } from "@chakra-ui/react";
-import { useAuth } from "../../contexts/AuthContext";
 import AIChatWindow from "./AIChatWindow";
 import SidebarContent, { SidebarContentRef } from "./SidebarContent";
 import { HiOutlineChatBubbleLeftEllipsis } from "react-icons/hi2";
@@ -29,7 +28,6 @@ const ChatPage: React.FC<ChatPageProps> = ({ onApiKeysOpen }) => {
   const [isNewChatMode, setIsNewChatMode] = useState(true); // Domyślnie true, aby pokazać ekran powitalny
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
-  const { user } = useAuth();
 
   // Ref do SidebarContent
   const sidebarRef = useRef<SidebarContentRef>(null);
