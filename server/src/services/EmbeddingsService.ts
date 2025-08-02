@@ -1,7 +1,4 @@
-import { pipeline, env } from '@xenova/transformers';
-
-// Wyłącz lokalne modele - używamy tylko cache
-env.allowLocalModels = false;
+// Dynamic import will be used in initialize() method to avoid ES modules issues
 
 interface EmbeddingResult {
   embedding: number[];
@@ -12,6 +9,7 @@ class EmbeddingsService {
   private static instance: EmbeddingsService;
   private embeddingPipeline: any = null;
   private isInitialized = false;
+  private transformers: any = null;
 
   private constructor() {}
 
@@ -32,8 +30,14 @@ class EmbeddingsService {
     try {
       console.log('🧠 Inicjalizacja EmbeddingsService...');
       
+      // Dynamically import the transformers library to avoid ES modules issues
+      this.transformers = await import('@xenova/transformers');
+      
+      // Wyłącz lokalne modele - używamy tylko cache
+      this.transformers.env.allowLocalModels = false;
+      
       // Używamy lekkiego modelu dla szybkości
-      this.embeddingPipeline = await pipeline(
+      this.embeddingPipeline = await this.transformers.pipeline(
         'feature-extraction', 
         'Xenova/all-MiniLM-L6-v2',
         { 
@@ -49,7 +53,9 @@ class EmbeddingsService {
       console.log('✅ EmbeddingsService zainicjalizowany');
     } catch (error) {
       console.error('❌ Błąd inicjalizacji EmbeddingsService:', error);
-      throw new Error('Nie udało się zainicjalizować generatora embeddings');
+      console.warn('⚠️ EmbeddingsService będzie działać w trybie bez generowania embeddings');
+      // Don't throw error - allow app to continue without embeddings
+      this.isInitialized = false;
     }
   }
 
@@ -59,6 +65,14 @@ class EmbeddingsService {
   public async generateEmbedding(text: string): Promise<EmbeddingResult> {
     if (!this.isInitialized) {
       await this.initialize();
+    }
+
+    // If initialization failed, return empty embedding
+    if (!this.isInitialized || !this.embeddingPipeline) {
+      return { 
+        embedding: [], 
+        error: 'EmbeddingsService nie jest dostępny - transformers library nie została załadowana' 
+      };
     }
 
     if (!text || text.trim().length === 0) {

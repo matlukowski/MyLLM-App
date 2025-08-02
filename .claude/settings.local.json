@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(copy \"dist\\*\" \"release\\win-unpacked\\resources\\app\\dist\"\")",
+      "Bash(powershell:*)",
+      "Bash(\"./MyLLM Chat.exe\")",
+      "Bash(npx electron-builder:*)",
+      "Bash(npm install:*)"
+    ],
+    "deny": []
+  }
+}

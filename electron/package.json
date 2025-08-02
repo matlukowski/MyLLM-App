@@ -25,6 +25,8 @@
     "productName": "MyLLM Chat",
     "copyright": "Copyright © 2025 MyLLM Chat Team",
     "compression": "maximum",
+    "asar": false,
+    "forceCodeSigning": false,
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -92,7 +94,10 @@
       "icon": "build/icon.ico",
       "requestedExecutionLevel": "asInvoker",
       "artifactName": "${productName}-Setup-${version}.${ext}",
-      "publisherName": "MyLLM Chat Team"
+      "publisherName": "MyLLM Chat Team",
+      "sign": false,
+      "signDlls": false,
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,

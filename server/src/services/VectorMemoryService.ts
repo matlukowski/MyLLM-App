@@ -1,18 +1,17 @@
 import { PrismaClient } from '@prisma/client';
-import EmbeddingsService from './EmbeddingsService';
+import KeywordMemoryService from './KeywordMemoryService';
 import ImportanceScorer from './ImportanceScorer';
 
 interface MemoryEntry {
   id: string;
   content: string;
-  embedding: number[];
+  embedding: string; // SQLite stores as JSON string
   importanceScore: number;
   timestamp: Date;
-  userId: string;
   chatId: string;
   messageId?: string;
   context?: string;
-  tags: string[];
+  tags: string; // SQLite stores as JSON string
   metadata?: any;
 }
 
@@ -28,7 +27,6 @@ interface SearchResult {
 }
 
 interface SearchFilters {
-  userId?: string;
   chatId?: string;
   tags?: string[];
   minImportance?: number;
@@ -38,11 +36,11 @@ interface SearchFilters {
 
 class VectorMemoryService {
   private prisma: PrismaClient;
-  private embeddingsService: EmbeddingsService;
+  private keywordMemoryService: KeywordMemoryService;
 
   constructor(prismaClient: PrismaClient) {
     this.prisma = prismaClient;
-    this.embeddingsService = EmbeddingsService.getInstance();
+    this.keywordMemoryService = KeywordMemoryService.getInstance();
   }
 
   /**
@@ -50,14 +48,8 @@ class VectorMemoryService {
    */
   public async initialize(): Promise<void> {
     console.log('🧠 Inicjalizacja VectorMemoryService...');
-    
-    try {
-      await this.embeddingsService.initialize();
-      console.log('✅ VectorMemoryService zainicjalizowany');
-    } catch (error) {
-      console.error('❌ Błąd inicjalizacji VectorMemoryService:', error);
-      throw error;
-    }
+    console.log('✅ VectorMemoryService zainicjalizowany');
+    console.log('🧠 VectorMemoryService initialized for single user mode');
   }
 
   /**
@@ -65,7 +57,6 @@ class VectorMemoryService {
    */
   public async addMemoryEntry(
     content: string,
-    userId: string,
     chatId: string,
     messageId?: string,
     context?: string
@@ -80,22 +71,22 @@ class VectorMemoryService {
         content.length
       );
 
-      // 2. Sprawdź ustawienia prywatności użytkownika
-      const userSettings = await this.getUserMemorySettings(userId);
+      // 2. Sprawdź ustawienia pamięci (domyślne dla single user)
+      const settings = await this.getMemorySettings();
       
       // Sprawdź czy pamięć jest włączona
-      if (userSettings?.memoryEnabled === false) {
-        console.log(`🚫 Pamięć wyłączona dla użytkownika ${userId}`);
+      if (settings?.memoryEnabled === false) {
+        console.log(`🚫 Pamięć wyłączona`);
         return null;
       }
       
       // Sprawdź tryb incognito
-      if (userSettings?.incognitoMode === true) {
-        console.log(`🕵️ Tryb incognito aktywny dla użytkownika ${userId}`);
+      if (settings?.incognitoMode === true) {
+        console.log(`🕵️ Tryb incognito aktywny`);
         return null;
       }
       
-      const threshold = userSettings?.importanceThreshold || 0.3;
+      const threshold = settings?.importanceThreshold || 0.3;
       
       console.log(`📊 Ocena ważności: ${importanceResult.score.toFixed(2)} (próg: ${threshold})`);
       console.log(`🏷️ Tagi: ${importanceResult.tags.join(', ') || 'brak'}`);
@@ -106,33 +97,27 @@ class VectorMemoryService {
         return null;
       }
 
-      // 3. Generuj embedding
-      const embeddingResult = await this.embeddingsService.generateEmbedding(content);
-      
-      if (embeddingResult.error || embeddingResult.embedding.length === 0) {
-        console.error('❌ Nie udało się wygenerować embedding:', embeddingResult.error);
-        return null;
-      }
+      // 3. Dodaj do pamięci słów kluczowych (szybsze i bardziej niezawodne)
+      this.keywordMemoryService.addMemory(content);
 
-      // 4. Sprawdź limity użytkownika
-      await this.enforceMemoryLimits(userId);
+      // 4. Sprawdź limity pamięci
+      await this.enforceMemoryLimits();
 
-      // 5. Zapisz w bazie danych
+      // 5. Zapisz w bazie danych (bez embedding)
       const memoryEntry = await this.prisma.vectorMemory.create({
         data: {
           content,
-          embedding: embeddingResult.embedding,
+          embedding: '[]', // Empty embedding for keyword-based approach
           importanceScore: importanceResult.score,
-          userId,
           chatId,
           messageId,
           context,
-          tags: importanceResult.tags,
-          metadata: {
+          tags: JSON.stringify(importanceResult.tags), // Convert to string for SQLite
+          metadata: JSON.stringify({
             reasoning: importanceResult.reasoning,
-            factors: importanceResult.factors as any, // Rzutowanie na JSON
+            factors: importanceResult.factors,
             createdAt: new Date().toISOString()
-          }
+          })
         }
       });
 
@@ -144,7 +129,6 @@ class VectorMemoryService {
         embedding: memoryEntry.embedding,
         importanceScore: memoryEntry.importanceScore,
         timestamp: memoryEntry.timestamp,
-        userId: memoryEntry.userId,
         chatId: memoryEntry.chatId,
         messageId: memoryEntry.messageId || undefined,
         context: memoryEntry.context || undefined,
@@ -159,7 +143,7 @@ class VectorMemoryService {
   }
 
   /**
-   * Wyszukuje podobne wpisy w pamięci
+   * Wyszukuje podobne wpisy w pamięci (używa KeywordMemoryService)
    */
   public async searchMemory(
     query: string, 
@@ -167,93 +151,25 @@ class VectorMemoryService {
   ): Promise<SearchResult[]> {
     
     try {
-      // 1. Generuj embedding dla zapytania
-      const queryEmbeddingResult = await this.embeddingsService.generateEmbedding(query);
+      console.log(`🔍 Wyszukiwanie w pamięci dla: "${query.substring(0, 50)}..."`);
       
-      if (queryEmbeddingResult.error || queryEmbeddingResult.embedding.length === 0) {
-        console.error('❌ Nie udało się wygenerować embedding dla zapytania');
-        return [];
-      }
-
-      // 2. Pobierz kandydatów z bazy danych z filtrami
-      const whereClause: any = {};
+      // Używaj KeywordMemoryService dla szybkiego wyszukiwania
+      const keywordResults = this.keywordMemoryService.searchMemories(query, filters.limit || 5);
       
-      if (filters.userId) whereClause.userId = filters.userId;
-      if (filters.chatId) whereClause.chatId = filters.chatId;
-      if (filters.minImportance) {
-        whereClause.importanceScore = { gte: filters.minImportance };
-      }
-      if (filters.maxAge) {
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - filters.maxAge);
-        whereClause.timestamp = { gte: cutoffDate };
-      }
-      if (filters.tags && filters.tags.length > 0) {
-        whereClause.tags = { hasSome: filters.tags };
-      }
-
-      const candidates = await this.prisma.vectorMemory.findMany({
-        where: whereClause,
-        orderBy: [
-          { importanceScore: 'desc' },
-          { timestamp: 'desc' }
-        ],
-        take: Math.min(filters.limit || 100, 1000) // Maksymalnie 1000 kandydatów
-      });
-
-      if (candidates.length === 0) {
-        return [];
-      }
-
-      // 3. Oblicz podobieństwa
-      const candidateEmbeddings = candidates.map(candidate => ({
-        id: candidate.id,
-        embedding: candidate.embedding,
-        entry: candidate
+      // Konwertuj wyniki KeywordMemoryService na format SearchResult
+      const searchResults: SearchResult[] = keywordResults.map(memory => ({
+        id: memory.id,
+        content: memory.content,
+        similarity: memory.relevanceScore || 0.5,
+        importanceScore: 0.7, // Default importance for keyword-based results
+        timestamp: memory.timestamp,
+        tags: memory.keywords,
+        context: undefined,
+        relevanceScore: (memory.relevanceScore || 0.5) * 0.7 // Combined score
       }));
 
-      const similarities = EmbeddingsService.findMostSimilar(
-        queryEmbeddingResult.embedding,
-        candidateEmbeddings,
-        Math.min(filters.limit || 20, 50)
-      );
-
-      // 4. Stwórz wyniki z kombinowanym scoringiem
-      const results: SearchResult[] = similarities.map(sim => {
-        const candidate = candidateEmbeddings.find(c => c.id === sim.id)?.entry;
-        if (!candidate) return null;
-
-        // Kombinowany score: podobieństwo semantyczne + ważność + świeżość
-        const semanticWeight = 0.6;
-        const importanceWeight = 0.3;
-        const timeWeight = 0.1;
-        
-        const daysSinceCreated = (Date.now() - candidate.timestamp.getTime()) / (1000 * 60 * 60 * 24);
-        const timeScore = Math.max(0, 1 - (daysSinceCreated / 365)); // Spadek przez rok
-        
-        const relevanceScore = 
-          (sim.similarity * semanticWeight) +
-          (candidate.importanceScore * importanceWeight) +
-          (timeScore * timeWeight);
-
-        return {
-          id: candidate.id,
-          content: candidate.content,
-          similarity: sim.similarity,
-          importanceScore: candidate.importanceScore,
-          timestamp: candidate.timestamp,
-          tags: candidate.tags,
-          context: candidate.context || undefined,
-          relevanceScore
-        };
-      }).filter(Boolean) as SearchResult[];
-
-      // 5. Sortuj po relevanceScore
-      results.sort((a, b) => b.relevanceScore - a.relevanceScore);
-
-      console.log(`🔍 Znaleziono ${results.length} podobnych wpisów dla zapytania: "${query.substring(0, 50)}..."`);
-      
-      return results;
+      console.log(`✅ Znaleziono ${searchResults.length} wyników w pamięci słów kluczowych`);
+      return searchResults;
 
     } catch (error) {
       console.error('❌ Błąd wyszukiwania w pamięci:', error);
@@ -262,92 +178,73 @@ class VectorMemoryService {
   }
 
   /**
-   * Pobiera kontekst z pamięci dla danego użytkownika (GLOBALNE wyszukiwanie)
+   * Pobiera kontekst z pamięci (używa KeywordMemoryService)
    */
   public async getMemoryContext(
     query: string,
-    userId: string,
     chatId?: string,
     maxTokens: number = 2000
   ): Promise<string> {
     
-    // Sprawdź ustawienia użytkownika
-    const userSettings = await this.getUserMemorySettings(userId);
+    // Sprawdź ustawienia pamięci
+    const settings = await this.getMemorySettings();
     
-    if (userSettings?.memoryEnabled === false) {
-      console.log(`🚫 Pamięć wyłączona dla użytkownika ${userId}`);
-      return '';
-    }
-    
-    const filters: SearchFilters = {
-      userId,
-      limit: 15,
-      minImportance: 0.3
-    };
-    
-    // Sprawdź czy użytkownik chce dzielić pamięć między czatami
-    if (userSettings?.shareMemoryAcrossChats === false && chatId) {
-      // Ogranicz tylko do aktualnego czatu
-      filters.chatId = chatId;
-      console.log(`🔒 Wyszukiwanie ograniczone do czatu ${chatId}`);
-    } else {
-      console.log(`🌐 Globalne wyszukiwanie w pamięci użytkownika ${userId}`);
-    }
-
-    const memoryResults = await this.searchMemory(query, filters);
-    
-    if (memoryResults.length === 0) {
+    if (settings?.memoryEnabled === false) {
+      console.log(`🚫 Pamięć wyłączona`);
       return '';
     }
 
-    // Buduj kontekst z informacjami o podobieństwie i pochodzeniu
-    let context = 'Relevantne informacje z poprzednich rozmów:\n\n';
-    let currentLength = context.length;
-
-    for (const result of memoryResults) {
-      // Pokaż podobieństwo i tagi dla lepszego zrozumienia
-      const similarityPercent = Math.round(result.similarity * 100);
-      const tags = result.tags.length > 0 ? ` [${result.tags.join(', ')}]` : '';
-      
-      const entryText = `• ${result.content}${tags} (podobieństwo: ${similarityPercent}%)`;
-      
-      if (currentLength + entryText.length > maxTokens) break;
-      
-      context += entryText + '\n';
-      currentLength += entryText.length + 1;
+    // Używaj KeywordMemoryService dla szybkiego wyszukiwania
+    const context = this.keywordMemoryService.getRelevantContext(query);
+    
+    if (context) {
+      console.log(`📋 Utworzono kontekst ze słów kluczowych (${context.length} znaków)`);
     }
-
-    console.log(`📋 Utworzono kontekst z ${memoryResults.length} wspomnień (${context.length} znaków)`);
-    return context.trim();
+    
+    return context;
   }
 
   /**
-   * Pobiera ustawienia pamięci użytkownika
+   * Pobiera ustawienia pamięci (single user mode)
    */
-  private async getUserMemorySettings(userId: string) {
-    return await this.prisma.memorySettings.findUnique({
-      where: { userId }
-    });
+  private async getMemorySettings() {
+    // Try to get settings from database, create default if not exists
+    let settings = await this.prisma.memorySettings.findFirst();
+    
+    if (!settings) {
+      settings = await this.prisma.memorySettings.create({
+        data: {
+          importanceThreshold: 0.3,
+          maxMemoryEntries: 10000,
+          retentionDays: 365,
+          autoCleanupEnabled: true,
+          memoryEnabled: true,
+          autoDeleteOnChatRemoval: true,
+          incognitoMode: false,
+          shareMemoryAcrossChats: true,
+          memoryAggressiveness: 'conservative'
+        }
+      });
+    }
+    
+    return settings;
   }
 
   /**
-   * Egzekwuje limity pamięci użytkownika
+   * Egzekwuje limity pamięci
    */
-  private async enforceMemoryLimits(userId: string): Promise<void> {
-    const settings = await this.getUserMemorySettings(userId);
-    const maxEntries = settings?.maxMemoryEntries || 10000;
+  private async enforceMemoryLimits(): Promise<void> {
+    const settings = await this.getMemorySettings();
+    const maxEntries = settings.maxMemoryEntries;
 
     // Sprawdź obecną liczbę wpisów
-    const currentCount = await this.prisma.vectorMemory.count({
-      where: { userId }
-    });
+    const currentCount = await this.prisma.vectorMemory.count();
 
     if (currentCount >= maxEntries) {
       // Usuń najstarsze, najmniej ważne wpisy
       const toDeleteCount = Math.max(1, Math.floor(maxEntries * 0.1)); // Usuń 10%
       
       const oldEntries = await this.prisma.vectorMemory.findMany({
-        where: { userId },
         orderBy: [
           { importanceScore: 'asc' },
           { timestamp: 'asc' }
@@ -363,7 +260,7 @@ class VectorMemoryService {
           }
         });
 
-        console.log(`🧹 Usunięto ${oldEntries.length} starych wpisów z pamięci użytkownika ${userId}`);
+        console.log(`🧹 Usunięto ${oldEntries.length} starych wpisów z pamięci`);
       }
     }
   }
@@ -371,27 +268,18 @@ class VectorMemoryService {
   /**
    * Czyści pamięć zgodnie z polityką retencji
    */
-  public async cleanupMemory(userId?: string): Promise<number> {
+  public async cleanupMemory(): Promise<number> {
     try {
-      const whereClause: any = {};
+      const settings = await this.getMemorySettings();
+      const retentionDays = settings.retentionDays;
       
-      if (userId) {
-        whereClause.userId = userId;
-        const settings = await this.getUserMemorySettings(userId);
-        const retentionDays = settings?.retentionDays || 365;
-        
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
-        whereClause.timestamp = { lt: cutoffDate };
-      } else {
-        // Globalne czyszczenie - usuń wpisy starsze niż 2 lata
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - 730);
-        whereClause.timestamp = { lt: cutoffDate };
-      }
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
       const result = await this.prisma.vectorMemory.deleteMany({
-        where: whereClause
+        where: {
+          timestamp: { lt: cutoffDate }
+        }
       });
 
       console.log(`🧹 Wyczyszczono ${result.count} starych wpisów z pamięci`);
@@ -406,13 +294,10 @@ class VectorMemoryService {
   /**
    * Usuwa wpisy pamięci powiązane z konkretnym czatem
    */
-  public async deleteMemoryByChat(chatId: string, userId?: string): Promise<number> {
+  public async deleteMemoryByChat(chatId: string): Promise<number> {
     try {
-      const whereClause: any = { chatId };
-      if (userId) whereClause.userId = userId;
-
       const result = await this.prisma.vectorMemory.deleteMany({
-        where: whereClause
+        where: { chatId }
       });
 
       console.log(`🗑️ Usunięto ${result.count} wpisów pamięci z czatu ${chatId}`);
@@ -426,13 +311,10 @@ class VectorMemoryService {
   /**
    * Usuwa wpisy pamięci powiązane z konkretną wiadomością
    */
-  public async deleteMemoryByMessage(messageId: string, userId?: string): Promise<number> {
+  public async deleteMemoryByMessage(messageId: string): Promise<number> {
     try {
-      const whereClause: any = { messageId };
-      if (userId) whereClause.userId = userId;
-
       const result = await this.prisma.vectorMemory.deleteMany({
-        where: whereClause
+        where: { messageId }
       });
 
       console.log(`🗑️ Usunięto ${result.count} wpisów pamięci dla wiadomości ${messageId}`);
@@ -444,18 +326,16 @@ class VectorMemoryService {
   }
 
   /**
-   * Usuwa wszystką pamięć konkretnego użytkownika
+   * Usuwa całą pamięć (single user mode)
    */
-  public async deleteAllUserMemory(userId: string): Promise<number> {
+  public async deleteAllMemory(): Promise<number> {
     try {
-      const result = await this.prisma.vectorMemory.deleteMany({
-        where: { userId }
-      });
+      const result = await this.prisma.vectorMemory.deleteMany({});
 
-      console.log(`🗑️ Usunięto całą pamięć użytkownika ${userId}: ${result.count} wpisów`);
+      console.log(`🗑️ Usunięto całą pamięć: ${result.count} wpisów`);
       return result.count;
     } catch (error) {
-      console.error('❌ Błąd usuwania pamięci użytkownika:', error);
+      console.error('❌ Błąd usuwania pamięci:', error);
       return 0;
     }
   }
@@ -463,18 +343,17 @@ class VectorMemoryService {
   /**
    * Sprawdza spójność pamięci i usuwa osierocone wpisy
    */
-  public async validateMemoryConsistency(userId: string): Promise<{
+  public async validateMemoryConsistency(): Promise<{
     orphanedEntries: number;
     invalidChats: number;
     invalidMessages: number;
   }> {
     try {
-      console.log(`🔍 Sprawdzanie spójności pamięci dla użytkownika ${userId}...`);
+      console.log(`🔍 Sprawdzanie spójności pamięci...`);
 
       // Znajdź wpisy pamięci bez odpowiadających im czatów
       const orphanedByChat = await this.prisma.vectorMemory.findMany({
         where: {
-          userId,
           NOT: {
             chatId: {
               in: await this.prisma.chat.findMany({
@@ -489,7 +368,6 @@ class VectorMemoryService {
       // Znajdź wpisy pamięci bez odpowiadających im wiadomości (jeśli messageId nie jest null)
       const orphanedByMessage = await this.prisma.vectorMemory.findMany({
         where: {
-          userId,
           messageId: { not: null },
           NOT: {
             messageId: {
@@ -541,9 +419,9 @@ class VectorMemoryService {
   }
 
   /**
-   * Pobiera statystyki pamięci użytkownika
+   * Pobiera statystyki pamięci
    */
-  public async getMemoryStats(userId: string): Promise<{
+  public async getMemoryStats(): Promise<{
     totalEntries: number;
     entriesByChat: { chatId: string; count: number; }[];
     topTags: { tag: string; count: number; }[];
@@ -552,38 +430,37 @@ class VectorMemoryService {
     newestEntry: Date | null;
   }> {
     try {
-      const totalEntries = await this.prisma.vectorMemory.count({
-        where: { userId }
-      });
+      const totalEntries = await this.prisma.vectorMemory.count();
 
       const entriesByChat = await this.prisma.vectorMemory.groupBy({
         by: ['chatId'],
-        where: { userId },
         _count: { id: true }
       });
 
       const averageImportance = await this.prisma.vectorMemory.aggregate({
-        where: { userId },
         _avg: { importanceScore: true }
       });
 
       const timeRange = await this.prisma.vectorMemory.aggregate({
-        where: { userId },
         _min: { timestamp: true },
         _max: { timestamp: true }
       });
 
-      // Policz tagi
+      // Policz tagi (parse from JSON strings)
       const allMemoryEntries = await this.prisma.vectorMemory.findMany({
-        where: { userId },
         select: { tags: true }
       });
 
       const tagCounts: { [key: string]: number } = {};
       allMemoryEntries.forEach(entry => {
-        entry.tags.forEach(tag => {
-          tagCounts[tag] = (tagCounts[tag] || 0) + 1;
-        });
+        try {
+          const tags = JSON.parse(entry.tags);
+          tags.forEach((tag: string) => {
+            tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+          });
+        } catch {
+          // Skip invalid JSON
+        }
       });
 
       const topTags = Object.entries(tagCounts)
@@ -620,7 +497,7 @@ class VectorMemoryService {
    * Sprawdza czy serwis jest gotowy
    */
   public isReady(): boolean {
-    return this.embeddingsService.isReady();
+    return true; // KeywordMemoryService is always ready
   }
 }
 

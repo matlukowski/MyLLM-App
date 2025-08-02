@@ -19,18 +19,16 @@ const prisma = new PrismaClient();
 const app: Express = express();
 const vectorMemoryService = new VectorMemoryService(prisma);
 
-// Inicjalizacja serwisu pamięci wektorowej w tle
-(async () => {
+// Initialize VectorMemoryService (fixed for single user mode)
+async function initializeVectorMemory() {
   try {
-    console.log('🧠 Rozpoczynam inicjalizację VectorMemoryService...');
     await vectorMemoryService.initialize();
-    console.log('✅ VectorMemoryService zainicjalizowany poprawnie');
+    console.log('🧠 VectorMemoryService initialized for single user mode');
   } catch (error) {
-    console.error('❌ Nie udało się zainicjalizować VectorMemoryService:', error);
-    console.log('⚠️  Aplikacja będzie działać bez pamięci wektorowej');
-    console.log('💡 Spróbuj ponownie uruchomić serwer - pierwszy model może być pobierany');
+    console.error('❌ Failed to initialize VectorMemoryService:', error);
+    console.log('📱 Desktop app will work without vector memory - basic chat functionality available');
   }
-})();
+}
 
 // Middlewares
 app.use(
@@ -182,7 +180,7 @@ app.delete("/api/chats/:chatId", async (req: Request, res: Response) => {
         
         if (userSettings?.autoDeleteOnChatRemoval !== false) {
           // Domyślnie usuń pamięć (chyba że użytkownik wyłączył)
-          memoryDeletedCount = await vectorMemoryService.deleteMemoryByChat(chatId, SINGLE_USER_ID);
+          memoryDeletedCount = await vectorMemoryService.deleteMemoryByChat(chatId);
           console.log(`🗑️ Automatycznie usunięto pamięć czatu (ustawienie: ${userSettings?.autoDeleteOnChatRemoval})`);
         } else {
           console.log(`🔒 Zachowano pamięć czatu (ustawienie użytkownika)`);
@@ -269,10 +267,8 @@ Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.
       where: { chatId }
     });
 
-    // 2. Pobierz ustawienia użytkownika
-    const userSettings = await prisma.memorySettings.findUnique({
-      where: { userId }
-    });
+    // 2. Pobierz ustawienia pamięci (single user mode)
+    const userSettings = await prisma.memorySettings.findFirst();
     
     const aggressiveness = (userSettings?.memoryAggressiveness || 'conservative') as MemoryAggressiveness;
 
@@ -291,7 +287,6 @@ Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.
       // Użyj pamięci wektorowej
       memoryContext = await vectorMemoryService.getMemoryContext(
         userMessage,
-        userId,
         intentAnalysis.useChatHistory ? undefined : chatId, // Globalne vs lokalne
         1500
       );
@@ -308,15 +303,14 @@ Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.
       const recentMessages = await prisma.message.findMany({
         where: { chatId },
         orderBy: { createdAt: 'desc' },
-        take: 6,
-        include: { sender: { select: { username: true } } }
+        take: 6
       });
 
       if (recentMessages.length > 1) {
         const chatHistory = recentMessages
           .reverse()
           .slice(0, -1) // Usuń aktualną wiadomość użytkownika
-          .map(msg => `${(msg.sender as any)?.username || 'AI'}: ${msg.content}`)
+          .map(msg => `${msg.senderType === 'user' ? 'User' : 'AI'}: ${msg.content}`)
           .join('\n');
         
         if (chatHistory) {
@@ -339,15 +333,14 @@ Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.
       const recentMessages = await prisma.message.findMany({
         where: { chatId },
         orderBy: { createdAt: 'desc' },
-        take: 4,
-        include: { sender: { select: { username: true } } }
+        take: 4
       });
 
       if (recentMessages.length > 1) {
         const chatHistory = recentMessages
           .reverse()
           .slice(0, -1)
-          .map(msg => `${(msg.sender as any)?.username || 'AI'}: ${msg.content}`)
+          .map(msg => `${msg.senderType === 'user' ? 'User' : 'AI'}: ${msg.content}`)
           .join('\n');
         
         if (chatHistory) {
@@ -832,19 +825,18 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       const recentMessages = await prisma.message.findMany({
         where: { chatId: currentChatId },
         orderBy: { createdAt: 'desc' },
-        take: 3,
-        include: { sender: { select: { username: true } } }
+        take: 3
+        // No need for sender include in single user mode
       });
       
       const context = recentMessages
         .reverse()
-        .map(msg => `${(msg.sender as any)?.username || 'AI'}: ${msg.content}`)
+        .map(msg => `${msg.senderType === 'user' ? 'User' : 'AI'}: ${msg.content}`)
         .join('\n');
 
       // Zapisz wiadomość użytkownika do pamięci (asynchronicznie)
       vectorMemoryService.addMemoryEntry(
         userMessage,
-        userId,
         currentChatId,
         userMessageRecord.id,
         context
@@ -855,7 +847,6 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
       // Zapisz odpowiedź AI do pamięci jako część konwersacji użytkownika (asynchronicznie)
       vectorMemoryService.addMemoryEntry(
         `AI odpowiedział: ${aiResponse}`, // Oznacz że to odpowiedź AI
-        userId, // Zapisz jako część pamięci użytkownika
         currentChatId,
         aiMessageRecord.id,
         context
@@ -895,10 +886,10 @@ app.post("/api/ai/chat", async (req: Request, res: Response) => {
 
 // TESTOWY endpoint do ręcznego sprawdzenia pamięci
 app.post("/api/memory/test", async (req: Request, res: Response) => {
-  const { userId, content } = req.body;
+  const { content } = req.body;
 
-  if (!userId || !content) {
-    return res.status(400).json({ error: "userId i content są wymagane" });
+  if (!content) {
+    return res.status(400).json({ error: "content jest wymagany" });
   }
 
   try {
@@ -907,7 +898,6 @@ app.post("/api/memory/test", async (req: Request, res: Response) => {
     if (vectorMemoryService.isReady()) {
       const result = await vectorMemoryService.addMemoryEntry(
         content,
-        userId,
         "test-chat",
         undefined,
         "Test context"
@@ -932,10 +922,10 @@ app.post("/api/memory/test", async (req: Request, res: Response) => {
 
 // Endpoint do wyszukiwania w pamięci
 app.post("/api/memory/search", async (req: Request, res: Response) => {
-  const { query, userId, chatId, limit = 10, minImportance = 0.3 } = req.body;
+  const { query, chatId, limit = 10, minImportance = 0.3 } = req.body;
 
-  if (!query || !userId) {
-    return res.status(400).json({ error: "query i userId są wymagane" });
+  if (!query) {
+    return res.status(400).json({ error: "query jest wymagany" });
   }
 
   if (!vectorMemoryService.isReady()) {
@@ -944,7 +934,6 @@ app.post("/api/memory/search", async (req: Request, res: Response) => {
 
   try {
     const results = await vectorMemoryService.searchMemory(query, {
-      userId,
       chatId,
       limit,
       minImportance
@@ -957,16 +946,14 @@ app.post("/api/memory/search", async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint do czyszczenia pamięci użytkownika (stare wpisy)
-app.delete("/api/memory/cleanup/:userId", async (req: Request, res: Response) => {
-  const { userId } = req.params;
-
+// Endpoint do czyszczenia pamięci (stare wpisy)
+app.delete("/api/memory/cleanup", async (req: Request, res: Response) => {
   if (!vectorMemoryService.isReady()) {
     return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
   }
 
   try {
-    const deletedCount = await vectorMemoryService.cleanupMemory(userId);
+    const deletedCount = await vectorMemoryService.cleanupMemory();
     res.json({ message: `Wyczyszczono ${deletedCount} starych wpisów z pamięci`, deletedCount });
   } catch (error) {
     console.error("❌ Błąd czyszczenia pamięci:", error);
@@ -977,18 +964,13 @@ app.delete("/api/memory/cleanup/:userId", async (req: Request, res: Response) =>
 // Endpoint do usuwania pamięci konkretnego czatu
 app.delete("/api/memory/chat/:chatId", async (req: Request, res: Response) => {
   const { chatId } = req.params;
-  const { userId } = req.body;
-
-  if (!userId) {
-    return res.status(400).json({ error: "userId jest wymagany" });
-  }
 
   if (!vectorMemoryService.isReady()) {
     return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
   }
 
   try {
-    const deletedCount = await vectorMemoryService.deleteMemoryByChat(chatId, userId);
+    const deletedCount = await vectorMemoryService.deleteMemoryByChat(chatId);
     res.json({ 
       message: `Usunięto pamięć z czatu ${chatId}`, 
       deletedCount,
@@ -1003,18 +985,13 @@ app.delete("/api/memory/chat/:chatId", async (req: Request, res: Response) => {
 // Endpoint do usuwania pamięci konkretnej wiadomości
 app.delete("/api/memory/message/:messageId", async (req: Request, res: Response) => {
   const { messageId } = req.params;
-  const { userId } = req.body;
-
-  if (!userId) {
-    return res.status(400).json({ error: "userId jest wymagany" });
-  }
 
   if (!vectorMemoryService.isReady()) {
     return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
   }
 
   try {
-    const deletedCount = await vectorMemoryService.deleteMemoryByMessage(messageId, userId);
+    const deletedCount = await vectorMemoryService.deleteMemoryByMessage(messageId);
     res.json({ 
       message: `Usunięto pamięć wiadomości ${messageId}`, 
       deletedCount,
@@ -1026,13 +1003,12 @@ app.delete("/api/memory/message/:messageId", async (req: Request, res: Response)
   }
 });
 
-// Endpoint do usuwania całej pamięci użytkownika
-app.delete("/api/memory/user/:userId", async (req: Request, res: Response) => {
-  const { userId } = req.params;
-  const { confirmUserId } = req.body; // Dodatkowa weryfikacja
+// Endpoint do usuwania całej pamięci (single user mode)
+app.delete("/api/memory/all", async (req: Request, res: Response) => {
+  const { confirm } = req.body; // Dodatkowa weryfikacja
 
-  if (!confirmUserId || confirmUserId !== userId) {
-    return res.status(400).json({ error: "Potwierdzenie userId jest wymagane" });
+  if (!confirm || confirm !== 'DELETE_ALL_MEMORY') {
+    return res.status(400).json({ error: "Potwierdzenie 'DELETE_ALL_MEMORY' jest wymagane" });
   }
 
   if (!vectorMemoryService.isReady()) {
@@ -1040,25 +1016,21 @@ app.delete("/api/memory/user/:userId", async (req: Request, res: Response) => {
   }
 
   try {
-    const deletedCount = await vectorMemoryService.deleteAllUserMemory(userId);
+    const deletedCount = await vectorMemoryService.deleteAllMemory();
     res.json({ 
-      message: `Usunięto całą pamięć użytkownika ${userId}`, 
-      deletedCount,
-      userId 
+      message: `Usunięto całą pamięć`, 
+      deletedCount
     });
   } catch (error) {
-    console.error("❌ Błąd usuwania pamięci użytkownika:", error);
-    res.status(500).json({ error: "Błąd podczas usuwania pamięci użytkownika" });
+    console.error("❌ Błąd usuwania pamięci:", error);
+    res.status(500).json({ error: "Błąd podczas usuwania pamięci" });
   }
 });
 
-// Endpoint do eksportu pamięci użytkownika
-app.get("/api/memory/export/:userId", async (req: Request, res: Response) => {
-  const { userId } = req.params;
-
+// Endpoint do eksportu pamięci (single user mode)
+app.get("/api/memory/export", async (req: Request, res: Response) => {
   try {
     const memoryEntries = await prisma.vectorMemory.findMany({
-      where: { userId },
       orderBy: { timestamp: 'desc' },
       select: {
         id: true,
@@ -1072,14 +1044,13 @@ app.get("/api/memory/export/:userId", async (req: Request, res: Response) => {
     });
 
     const exportData = {
-      userId,
       exportDate: new Date().toISOString(),
       entriesCount: memoryEntries.length,
       entries: memoryEntries
     };
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="memory-export-${userId}-${Date.now()}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="memory-export-${Date.now()}.json"`);
     res.json(exportData);
   } catch (error) {
     console.error("❌ Błąd eksportu pamięci:", error);
@@ -1087,24 +1058,21 @@ app.get("/api/memory/export/:userId", async (req: Request, res: Response) => {
   }
 });
 
-// Endpoint do statystyk pamięci użytkownika (ulepszony)
-app.get("/api/memory/stats/:userId", async (req: Request, res: Response) => {
-  const { userId } = req.params;
-
+// Endpoint do statystyk pamięci (single user mode)
+app.get("/api/memory/stats", async (req: Request, res: Response) => {
   try {
     if (vectorMemoryService.isReady()) {
       // Użyj nowej metody z VectorMemoryService
-      const stats = await vectorMemoryService.getMemoryStats(userId);
+      const stats = await vectorMemoryService.getMemoryStats();
       res.json({
         ...stats,
         memoryServiceReady: true
       });
     } else {
       // Fallback - podstawowe statystyki z Prisma
-      const totalEntries = await prisma.vectorMemory.count({ where: { userId } });
+      const totalEntries = await prisma.vectorMemory.count();
       
       const averageImportance = await prisma.vectorMemory.aggregate({
-        where: { userId },
         _avg: { importanceScore: true }
       });
 
@@ -1125,22 +1093,19 @@ app.get("/api/memory/stats/:userId", async (req: Request, res: Response) => {
 });
 
 // Endpoint do weryfikacji spójności pamięci
-app.post("/api/memory/validate/:userId", async (req: Request, res: Response) => {
-  const { userId } = req.params;
-
+app.post("/api/memory/validate", async (req: Request, res: Response) => {
   if (!vectorMemoryService.isReady()) {
     return res.status(503).json({ error: "Serwis pamięci wektorowej nie jest gotowy" });
   }
 
   try {
-    console.log(`🔍 Rozpoczynam weryfikację spójności pamięci dla użytkownika ${userId}`);
+    console.log(`🔍 Rozpoczynam weryfikację spójności pamięci`);
     
-    const validationStats = await vectorMemoryService.validateMemoryConsistency(userId);
+    const validationStats = await vectorMemoryService.validateMemoryConsistency();
     
     res.json({
       message: "Weryfikacja spójności zakończona",
-      stats: validationStats,
-      userId
+      stats: validationStats
     });
   } catch (error) {
     console.error("❌ Błąd weryfikacji spójności pamięci:", error);
@@ -1230,8 +1195,10 @@ app.put("/api/memory/settings", async (req: Request, res: Response) => {
 // --- Uruchomienie serwera i obsługa zamykania ---
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server is running at http://localhost:${PORT}`);
+  // Initialize vector memory service
+  await initializeVectorMemory();
 });
 
 const gracefulShutdown = async (signal: string) => {

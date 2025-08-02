@@ -13,8 +13,8 @@ let databaseSetup: DatabaseSetup | null = null;
 let serverPort = 3001;
 let frontendPort = 5173;
 
-// Force development mode when running in dev environment
-const isDevelopment = !app.isPackaged || process.env.NODE_ENV === 'development';
+// Force production mode for packaged app
+const isDevelopment = false;
 const isPackaged = app.isPackaged;
 
 console.log('NODE_ENV:', process.env.NODE_ENV, 'isDevelopment:', isDevelopment, 'isPackaged:', isPackaged);
@@ -84,12 +84,33 @@ const createMainWindow = (): void => {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      webSecurity: true
+      webSecurity: true,
+      devTools: false
     },
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default'
   };
 
   mainWindow = new BrowserWindow(windowOptions);
+
+  // Completely disable DevTools
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+      event.preventDefault();
+    }
+    if (input.key === 'F12') {
+      event.preventDefault();
+    }
+  });
+
+  // Block DevTools from opening via any method
+  mainWindow.webContents.on('devtools-opened', () => {
+    mainWindow?.webContents.closeDevTools();
+  });
+
+  // Override openDevTools function
+  mainWindow.webContents.openDevTools = () => {
+    console.log('DevTools opening blocked');
+  };
 
   // Load the frontend
   const frontendUrl = getFrontendPath();
@@ -101,10 +122,9 @@ const createMainWindow = (): void => {
   mainWindow.once('ready-to-show', () => {
     if (mainWindow) {
       mainWindow.show();
-      
-      // Open DevTools in development
-      if (isDevelopment) {
-        mainWindow.webContents.openDevTools();
+      // Force close DevTools if they somehow opened
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
       }
     }
   });

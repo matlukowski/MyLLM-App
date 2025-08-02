@@ -101,59 +101,74 @@ export class DatabaseSetup {
   }
 
   private async runMigrations(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const prismaPath = path.join(this.userDataPath, 'prisma');
-      
-      // Try development path first (relative to project root)
-      let nodeModulesPath = path.join(__dirname, '../../../../server/node_modules');
-      
-      // If development path doesn't exist, try production path
-      if (!fs.existsSync(nodeModulesPath)) {
-        nodeModulesPath = path.join(process.resourcesPath, 'server/node_modules');
-      }
-      
-      const prismaBin = path.join(nodeModulesPath, '.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma');
-      
-      // Check if Prisma binary exists
-      if (!fs.existsSync(prismaBin)) {
-        console.warn(`Prisma binary not found at: ${prismaBin}`);
-        console.log('Skipping database migrations in development mode');
-        resolve();
-        return;
-      }
-
-      console.log('Running database migrations...');
-      
-      const migrateProcess = spawn(prismaBin, ['db', 'push', '--schema', path.join(prismaPath, 'schema.prisma')], {
-        env: {
-          ...process.env,
-          DATABASE_URL: process.env.DATABASE_URL
-        },
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-
-      migrateProcess.stdout?.on('data', (data) => {
-        console.log(`Migration stdout: ${data}`);
-      });
-
-      migrateProcess.stderr?.on('data', (data) => {
-        console.error(`Migration stderr: ${data}`);
-      });
-
-      migrateProcess.on('close', (code) => {
-        if (code === 0) {
-          console.log('Database migrations completed successfully');
-          resolve();
-        } else {
-          reject(new Error(`Migration process exited with code ${code}`));
+    if (this.isDevelopment) {
+      return new Promise((resolve, reject) => {
+        const prismaPath = path.join(this.userDataPath, 'prisma');
+        
+        // Try development path first (relative to project root)
+        let nodeModulesPath = path.join(__dirname, '../../../../server/node_modules');
+        
+        // If development path doesn't exist, try production path
+        if (!fs.existsSync(nodeModulesPath)) {
+          nodeModulesPath = path.join(process.resourcesPath, 'server/node_modules');
         }
-      });
+        
+        const prismaBin = path.join(nodeModulesPath, '.bin', process.platform === 'win32' ? 'prisma.cmd' : 'prisma');
+        
+        // Check if Prisma binary exists
+        if (!fs.existsSync(prismaBin)) {
+          console.warn(`Prisma binary not found at: ${prismaBin}`);
+          console.log('Skipping database migrations in development mode');
+          resolve();
+          return;
+        }
 
-      migrateProcess.on('error', (error) => {
-        console.error('Migration process error:', error);
-        reject(error);
+        console.log('Running database migrations...');
+        
+        const migrateProcess = spawn(prismaBin, ['db', 'push', '--schema', path.join(prismaPath, 'schema.prisma')], {
+          env: {
+            ...process.env,
+            DATABASE_URL: process.env.DATABASE_URL
+          },
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+
+        migrateProcess.stdout?.on('data', (data) => {
+          console.log(`Migration stdout: ${data}`);
+        });
+
+        migrateProcess.stderr?.on('data', (data) => {
+          console.error(`Migration stderr: ${data}`);
+        });
+
+        migrateProcess.on('close', (code) => {
+          if (code === 0) {
+            console.log('Database migrations completed successfully');
+            resolve();
+          } else {
+            reject(new Error(`Migration process exited with code ${code}`));
+          }
+        });
+
+        migrateProcess.on('error', (error) => {
+          console.error('Migration process error:', error);
+          reject(error);
+        });
       });
-    });
+    } else {
+      // Production: Skip migrations, use pre-built database or auto-create tables
+      console.log('Production mode: Skipping Prisma migrations');
+      const dbPath = this.getDatabasePath();
+      
+      // Create database file if it doesn't exist
+      if (!fs.existsSync(dbPath)) {
+        console.log('Creating empty database file');
+        fs.writeFileSync(dbPath, '');
+      }
+      
+      console.log('Database initialization completed');
+      return Promise.resolve();
+    }
   }
 
   getDatabasePath(): string {

@@ -155,7 +155,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
       try {
         const [messagesResponse, chatListResponse] = await Promise.all([
           fetch(`http://localhost:3001/api/chats/${chatId}/messages`),
-          fetch(`http://localhost:3001/api/chats?userId=${user?.id}`),
+          fetch(`http://localhost:3001/api/chats?userId=${SINGLE_USER_ID}`),
         ]);
 
         let chatModelId = AVAILABLE_LLM_MODELS[0].id;
@@ -181,7 +181,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
               id: msg.id,
               content: msg.content,
               timestamp: new Date(msg.createdAt),
-              role: msg.senderId === user?.id ? "user" : "assistant",
+              role: msg.senderType === "user" ? "user" : "assistant",
               modelId: chatModelId, // Użyj modelu z detali czatu
             })
           );
@@ -209,13 +209,13 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
     };
 
     loadChatHistory();
-  }, [chatId, isNewChat, isJustCreated, user?.id]);
+  }, [chatId, isNewChat, isJustCreated]);
 
   // Wyślij wiadomość do AI
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newMessage.trim() || !user || isSending) return;
+    if (!newMessage.trim() || isSending) return;
 
     const userMessageContent = newMessage.trim();
     setNewMessage("");
@@ -630,7 +630,7 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
                       <HStack w="full" justify="space-between" align="center">
                         <Text fontWeight="600" color="gray.800" fontSize="sm">
                           {isUserMessage
-                            ? user?.username || "Ty"
+                            ? "User"
                             : messageModel?.name || "AI"}
                         </Text>
                         <Button

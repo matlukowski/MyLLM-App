@@ -24,40 +24,71 @@ export class ServerManager {
     return new Promise((resolve, reject) => {
       console.log(`Starting server from: ${serverPath}`);
       
-      this.serverProcess = spawn('node', [serverPath], {
-        cwd: path.dirname(serverPath),
-        env: {
-          ...process.env,
-          NODE_ENV: 'production',
-          PORT: this.port.toString(),
-          DATABASE_URL: this.getDatabaseUrl()
-        },
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
+      if (this.isDevelopment) {
+        // Development: spawn separate node process
+        this.serverProcess = spawn('node', [serverPath], {
+          cwd: path.dirname(serverPath),
+          env: {
+            ...process.env,
+            NODE_ENV: 'production',
+            PORT: this.port.toString(),
+            DATABASE_URL: this.getDatabaseUrl()
+          },
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
 
-      this.serverProcess.stdout?.on('data', (data) => {
-        console.log(`Server stdout: ${data}`);
-      });
+        this.serverProcess.stdout?.on('data', (data) => {
+          console.log(`Server stdout: ${data}`);
+        });
 
-      this.serverProcess.stderr?.on('data', (data) => {
-        console.error(`Server stderr: ${data}`);
-      });
+        this.serverProcess.stderr?.on('data', (data) => {
+          console.error(`Server stderr: ${data}`);
+        });
 
-      this.serverProcess.on('error', (error) => {
-        console.error('Server process error:', error);
-        reject(error);
-      });
+        this.serverProcess.on('error', (error) => {
+          console.error('Server process error:', error);
+          reject(error);
+        });
 
-      this.serverProcess.on('close', (code) => {
-        console.log(`Server process exited with code ${code}`);
-        this.serverProcess = null;
-      });
+        this.serverProcess.on('close', (code) => {
+          console.log(`Server process exited with code ${code}`);
+          this.serverProcess = null;
+        });
 
-      // Wait for server to start
-      setTimeout(() => {
-        console.log(`Server started on port ${this.port}`);
-        resolve();
-      }, 3000);
+        // Wait for server to start
+        setTimeout(() => {
+          console.log(`Server started on port ${this.port}`);
+          resolve();
+        }, 3000);
+      } else {
+        // Production: run server in the same process
+        try {
+          // Set environment variables
+          process.env.NODE_ENV = 'production';
+          process.env.PORT = this.port.toString();
+          process.env.DATABASE_URL = this.getDatabaseUrl();
+          
+          // Change to server directory for proper module resolution
+          const originalCwd = process.cwd();
+          const serverDir = path.dirname(serverPath);
+          process.chdir(serverDir);
+          
+          console.log(`Server working directory: ${serverDir}`);
+          console.log(`Looking for Express in: ${path.join(serverDir, 'node_modules', 'express')}`);
+          
+          // Import and start the server
+          require(serverPath);
+          
+          // Restore original working directory
+          process.chdir(originalCwd);
+          
+          console.log(`Server started on port ${this.port}`);
+          resolve();
+        } catch (error) {
+          console.error('Server start error:', error);
+          reject(error);
+        }
+      }
     });
   }
 
