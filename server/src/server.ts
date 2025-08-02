@@ -511,14 +511,14 @@ Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.
 
       // Mapowanie modeli Gemini
       const geminiModels = {
-        "gemini-2.5-flash": "gemini-1.5-flash",
-        "gemini-2.5-pro": "gemini-1.5-pro",
+        "gemini-2.5-flash": "gemini-2.0-flash-exp",
+        "gemini-2.5-pro": "gemini-2.0-flash-exp",
         "gemini-1.5-flash": "gemini-1.5-flash",
         "gemini-1.5-pro": "gemini-1.5-pro",
       };
       const modelName =
         geminiModels[modelId as keyof typeof geminiModels] ||
-        "gemini-1.5-flash";
+        "gemini-2.0-flash-exp";
 
       const model = genAI.getGenerativeModel({
         model: modelName,
@@ -543,12 +543,17 @@ Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.
       const openai = new OpenAI({ apiKey });
 
       const modelMapping = {
-        "gpt-4.1": "gpt-4",
+        "o3-2025-04-16": "o1-preview",
+        "chatgpt-4o-latest-20250326": "gpt-4o",
+        "gpt4-1": "gpt-4-turbo",
+        "gpt4-1-mini": "gpt-4o-mini",
+        "o4-mini-high": "o1-mini",
+        "gpt-4o": "gpt-4o",
         "gpt-4": "gpt-4",
         "gpt-3.5-turbo": "gpt-3.5-turbo",
       };
       const openaiModel =
-        modelMapping[modelId as keyof typeof modelMapping] || "gpt-4";
+        modelMapping[modelId as keyof typeof modelMapping] || "gpt-4o";
 
       const response = await openai.chat.completions.create({
         model: openaiModel,
@@ -573,6 +578,9 @@ Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.
       const anthropic = new Anthropic({ apiKey });
 
       const modelMapping = {
+        "claude-opus-4-20250514-thinking-16k": "claude-3-5-sonnet-20241022",
+        "claude-opus-4-20250514": "claude-3-opus-20240229", 
+        "claude-sonnet-4-20250514": "claude-3-5-sonnet-20241022",
         "claude-3.5-sonnet": "claude-3-5-sonnet-20241022",
         "claude-3.5-haiku": "claude-3-5-haiku-20241022",
       };
@@ -594,6 +602,68 @@ Skupiaj się na rozwiązaniach i praktycznych poradach zamiast na współczuciu.
       return "Przepraszam, nie mogę wygenerować odpowiedzi.";
     } catch (error) {
       throw new Error(`Błąd Anthropic: ${error}`);
+    }
+  } else if (provider === "xai") {
+    try {
+      const { OpenAI } = await import("openai");
+      const xai = new OpenAI({
+        apiKey,
+        baseURL: "https://api.x.ai/v1",
+      });
+
+      const modelMapping = {
+        "grok-4-0709": "grok-beta",
+      };
+      const xaiModel =
+        modelMapping[modelId as keyof typeof modelMapping] || "grok-beta";
+
+      const response = await xai.chat.completions.create({
+        model: xaiModel,
+        messages: [
+          { role: "system", content: basicPrompt },
+          { role: "user", content: fullMessage },
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+      });
+
+      return (
+        response.choices[0]?.message?.content ||
+        "Przepraszam, nie mogę wygenerować odpowiedzi."
+      );
+    } catch (error) {
+      throw new Error(`Błąd xAI: ${error}`);
+    }
+  } else if (provider === "deepseek") {
+    try {
+      const { OpenAI } = await import("openai");
+      const deepseek = new OpenAI({
+        apiKey,
+        baseURL: "https://api.deepseek.com",
+      });
+
+      const modelMapping = {
+        "deepseek-r1-0528": "deepseek-reasoner",
+      };
+      const deepseekModel =
+        modelMapping[modelId as keyof typeof modelMapping] || "deepseek-reasoner";
+
+      const response = await deepseek.chat.completions.create({
+        model: deepseekModel,
+        messages: [
+          { role: "system", content: basicPrompt },
+          { role: "user", content: fullMessage },
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+      });
+
+      return (
+        response.choices[0]?.message?.content ||
+        "Przepraszam, nie mogę wygenerować odpowiedzi."
+      );
+    } catch (error) {
+      throw new Error(`Błąd DeepSeek: ${error}`);
     }
   } else {
     throw new Error(`Nieobsługiwany dostawca: ${provider}`);

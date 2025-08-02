@@ -39,7 +39,7 @@ const API_PROVIDERS = [
   {
     id: "openai",
     name: "OpenAI",
-    description: "Klucz API dla modeli GPT",
+    description: "Klucz API dla modeli GPT i O-series",
     placeholder: "sk-...",
     helpText: "Znajdź swój klucz API na platform.openai.com/api-keys",
   },
@@ -49,6 +49,20 @@ const API_PROVIDERS = [
     description: "Klucz API dla modeli Claude",
     placeholder: "sk-ant-...",
     helpText: "Znajdź swój klucz API na console.anthropic.com",
+  },
+  {
+    id: "xai",
+    name: "xAI",
+    description: "Klucz API dla modeli Grok",
+    placeholder: "xai-...",
+    helpText: "Znajdź swój klucz API na x.ai/api",
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    description: "Klucz API dla modeli DeepSeek",
+    placeholder: "sk-...",
+    helpText: "Znajdź swój klucz API na platform.deepseek.com",
   },
 ];
 

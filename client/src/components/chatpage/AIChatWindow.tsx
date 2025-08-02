@@ -15,7 +15,6 @@ import {
   Badge,
   IconButton,
   Image,
-  useDisclosure,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
 
@@ -39,14 +38,12 @@ import {
   HiOutlinePaperClip,
   HiOutlineXMark,
 } from "react-icons/hi2";
-import { FaBrain } from "react-icons/fa";
 import {
   AVAILABLE_LLM_MODELS,
   getLLMModel,
-  type LLMModel,
 } from "../../types/types";
 import MarkdownRenderer from "../ui/MarkdownRenderer";
-import { useFileUpload, type FileUploadData } from "../../hooks/useFileUpload";
+import { useFileUpload } from "../../hooks/useFileUpload";
 
 interface ChatMessage {
   id: string;
@@ -267,6 +264,12 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         apiKey = savedKeys.find(
           (key: any) => key.provider === "anthropic"
         )?.key;
+      } else if (currentModel?.provider === "xAI") {
+        requiredProvider = "xai";
+        apiKey = savedKeys.find((key: any) => key.provider === "xai")?.key;
+      } else if (currentModel?.provider === "DeepSeek") {
+        requiredProvider = "deepseek";
+        apiKey = savedKeys.find((key: any) => key.provider === "deepseek")?.key;
       }
 
       // Sprawdź czy klucz API jest dostępny
@@ -279,6 +282,10 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
             ? "platform.openai.com/api-keys"
             : requiredProvider === "anthropic"
             ? "console.anthropic.com"
+            : requiredProvider === "xai"
+            ? "x.ai/api"
+            : requiredProvider === "deepseek"
+            ? "platform.deepseek.com"
             : "odpowiedniej stronie dostawcy";
 
         setError(
@@ -403,6 +410,10 @@ const AIChatWindow: React.FC<AIChatWindowProps> = ({
         return "🟠";
       case "Google":
         return "🔵";
+      case "xAI":
+        return "⚫";
+      case "DeepSeek":
+        return "🔴";
       case "Meta":
         return "🟣";
       default:
