@@ -14,52 +14,23 @@
 ### Najnowsza wersja: [Releases](https://github.com/your-username/myllm-chat/releases)
 
 #### Windows 🪟
-- **[📦 MyLLM-Chat-Setup.exe](https://github.com/your-username/myllm-chat/releases/latest)** - Installer NSIS
-- **[📦 MyLLM-Chat.msi](https://github.com/your-username/myllm-chat/releases/latest)** - Installer MSI
+- **[📦 MyLLM Chat.exe](https://github.com/your-username/myllm-chat/releases/latest)** - Portable Application
 - **Wymagania**: Windows 10/11 (64-bit)
-
-#### macOS 🍎  
-- **[📦 MyLLM-Chat.dmg](https://github.com/your-username/myllm-chat/releases/latest)** - Disk Image
-- **[📦 MyLLM-Chat.pkg](https://github.com/your-username/myllm-chat/releases/latest)** - Package Installer
-- **Wymagania**: macOS 10.15+ (Intel/Apple Silicon)
-
-#### Linux 🐧
-- **[📦 MyLLM-Chat.AppImage](https://github.com/your-username/myllm-chat/releases/latest)** - Portable AppImage
-- **[📦 MyLLM-Chat.deb](https://github.com/your-username/myllm-chat/releases/latest)** - Debian/Ubuntu Package
-- **Wymagania**: Ubuntu 18.04+ / Debian 10+
+- **Rozmiar**: ~300MB (zawiera wszystko potrzebne do działania)
 
 ### 🚀 Szybki start
-1. Pobierz installer dla swojego systemu
-2. Uruchom plik i postępuj zgodnie z instrukcjami
-3. Otwórz aplikację i skonfiguruj klucze API
+1. Pobierz `MyLLM Chat.exe` z [Releases](https://github.com/your-username/myllm-chat/releases)
+2. Uruchom plik - aplikacja jest gotowa do użycia (nie wymaga instalacji)
+3. Skonfiguruj klucze API w ustawieniach
 4. Rozpocznij chatowanie z AI!
 
 ### 📱 Instalacja
 
 #### Windows 🪟
-1. Pobierz `.exe` lub `.msi` z [Releases](https://github.com/your-username/myllm-chat/releases)
-2. Uruchom installer jako administrator (jeśli Windows wymaga)
+1. Pobierz `MyLLM Chat.exe` z [Releases](https://github.com/your-username/myllm-chat/releases)
+2. Uruchom aplikację (może być wymagane pozwolenie administratora przy pierwszym uruchomieniu)
 3. Jeśli Windows SmartScreen zablokuje: kliknij "More info" → "Run anyway"
-4. Postępuj zgodnie z kreatorem instalacji
-
-#### macOS 🍎
-1. Pobierz `.dmg` z [Releases](https://github.com/your-username/myllm-chat/releases)
-2. Otwórz plik `.dmg` i przeciągnij MyLLM Chat do Applications
-3. Przy pierwszym uruchomieniu: kliknij prawym → "Open" (obejście Gatekeeper)
-4. Lub w System Preferences → Security → "Open Anyway"
-
-#### Linux 🐧
-**AppImage (zalecane)**:
-```bash
-chmod +x MyLLM-Chat-*.AppImage
-./MyLLM-Chat-*.AppImage
-```
-
-**Debian/Ubuntu**:
-```bash
-sudo dpkg -i MyLLM-Chat_*.deb
-sudo apt-get install -f  # jeśli brakuje zależności
-```
+4. Aplikacja jest gotowa do użycia - nie wymaga instalacji!
 
 ## 📖 Opis projektu
 
@@ -138,7 +109,7 @@ MyLLM Chat to nowoczesna aplikacja webowa umożliwiająca konwersacje z różnym
 - **Express** - framework webowy
 - **TypeScript** - statyczne typowanie
 - **Prisma** - ORM i migracje bazy danych
-- **PostgreSQL** - baza danych
+- **SQLite** - lokalna baza danych (embedded)
 - **bcrypt** - hashowanie haseł
 - **Multer** - obsługa plików
 - **CORS** - obsługa cross-origin requests
@@ -148,7 +119,7 @@ MyLLM Chat to nowoczesna aplikacja webowa umożliwiająca konwersacje z różnym
 - **@google/generative-ai** - Google Gemini
 - **openai** - OpenAI GPT
 - **@anthropic-ai/sdk** - Anthropic Claude
-- **@xenova/transformers** - lokalne generowanie embeddings dla pamięci wektorowej
+- **Keyword-based memory** - system pamięci oparty na słowach kluczowych
 
 ### Obsługa plików
 
@@ -158,11 +129,11 @@ MyLLM Chat to nowoczesna aplikacja webowa umożliwiająca konwersacje z różnym
 
 ## 🚀 Instalacja i uruchomienie
 
-### Wymagania systemowe
+### Wymagania systemowe (tylko dla developmentu)
 
 - **Node.js** 18+
 - **npm** lub **yarn**
-- **PostgreSQL** 12+
+- **SQLite** (automatycznie dołączone)
 
 ### 1. Klonowanie repozytorium
 
@@ -184,31 +155,9 @@ cd ../server && npm install
 
 ### 3. Konfiguracja bazy danych
 
-#### Utwórz bazę PostgreSQL
+Baza danych SQLite jest automatycznie tworzona przy pierwszym uruchomieniu aplikacji. Nie wymaga dodatkowej konfiguracji.
 
-```sql
-CREATE DATABASE myllm_chat;
-CREATE USER myllm_user WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE myllm_chat TO myllm_user;
-```
-
-#### Skonfiguruj zmienną środowiskową
-
-Utwórz plik `server/.env`:
-
-```env
-DATABASE_URL="postgresql://myllm_user:your_password@localhost:5432/myllm_chat"
-```
-
-### 4. Migracja bazy danych
-
-```bash
-cd server
-npx prisma migrate deploy
-npx prisma generate
-```
-
-### 5. Uruchomienie aplikacji
+### 4. Uruchomienie aplikacji
 
 #### Opcja 1: Wszystko naraz (zalecane)
 
@@ -229,89 +178,52 @@ cd client
 npm run dev
 ```
 
-### 6. Dostęp do aplikacji
+### 5. Dostęp do aplikacji
 
 - **Frontend**: http://localhost:5173
 - **Backend**: http://localhost:3001
 
-## 🖥️ Budowanie aplikacji desktop
+## 🖥️ Budowanie aplikacji desktop (Windows)
 
 ### Wymagania dla budowania
 - **Node.js** 18+
 - **npm** 8+
-- **Wszystkie zależności** zainstalowane (root + workspaces)
+- **Windows 10/11** (64-bit)
 
-### Szybkie budowanie
+### Budowanie portable .exe
 
-#### Windows (.exe + .msi)
 ```bash
-npm run release:build:win
+# Z głównego katalogu projektu
+cd electron
+npm run build
+npx electron-builder --win --x64 --publish=never
 ```
 
-#### macOS (.dmg + .pkg)  
-```bash
-npm run release:build:mac
-```
+### Lokalizacja pliku
+Po zbudowaniu znajdziesz gotowy plik:
+`electron/release/win-unpacked/MyLLM Chat.exe`
 
-#### Linux (.AppImage + .deb)
-```bash
-npm run release:build:linux
-```
-
-#### Wszystkie platformy
-```bash
-npm run release:build:all
-```
-
-### Pliki wyjściowe
-Wszystkie zbudowane instalatory znajdziesz w: `electron/release/`
-
-### Czyszczenie przed buildem
-```bash
-npm run release:clean
-npm run release:test
-```
-
-### Workflow manual release
-1. **Przygotuj wersję**:
+### Tworzenie GitHub Release
+1. **Przygotuj aplikację**:
    ```bash
-   npm run release:clean
-   npm run release:test
+   cd electron
+   npm run build
+   npx electron-builder --win --x64 --publish=never
    ```
 
-2. **Zbuduj instalatory**:
+2. **Przetestuj aplikację**:
    ```bash
-   npm run release:build:all
+   cd release/win-unpacked
+   "./MyLLM Chat.exe"
    ```
 
-3. **Sprawdź wyniki** w `electron/release/`:
-   - `MyLLM-Chat-Setup-1.0.0.exe` (Windows NSIS)
-   - `MyLLM-Chat-1.0.0.msi` (Windows MSI)
-   - `MyLLM-Chat-1.0.0.dmg` (macOS)
-   - `MyLLM-Chat-1.0.0.pkg` (macOS)
-   - `MyLLM-Chat-1.0.0.AppImage` (Linux)
-   - `MyLLM-Chat_1.0.0_amd64.deb` (Linux)
-
-4. **Utwórz GitHub Release**:
+3. **Utwórz GitHub Release**:
    - Idź na GitHub → Releases → "Create new release"
    - Tag: `v1.0.0` (nowa wersja)
-   - Tytuł: `MyLLM Chat v1.0.0`
+   - Tytuł: `MyLLM Chat v1.0.0 - Windows Portable`
    - Opis: Opisz zmiany w tej wersji
-   - Załącz wszystkie pliki z `electron/release/`
+   - Załącz plik `MyLLM Chat.exe` z folderu `electron/release/win-unpacked/`
    - Kliknij "Publish release"
-
-### Troubleshooting budowania
-
-#### Windows
-- Zainstaluj **Windows Build Tools**: `npm install -g windows-build-tools`
-- Może potrzebować **Visual Studio Build Tools**
-
-#### macOS  
-- Zainstaluj **Xcode Command Line Tools**: `xcode-select --install`
-- Może potrzebować **Apple Developer Certificate** do signing
-
-#### Linux
-- Zainstaluj pakiety build: `sudo apt-get install build-essential libnss3-dev libatk-bridge2.0-dev libgtk-3-dev libxss1`
 
 ## 🔑 Konfiguracja kluczy API
 
@@ -412,9 +324,8 @@ myllm-chat/
 
 ## 🐛 Rozwiązywanie problemów
 
-### Problemy z aplikacją desktop 🖥️
+### Problemy z aplikacją desktop (Windows) 🖥️
 
-#### Windows
 **Windows SmartScreen blokuje aplikację**
 1. Kliknij "More info" 
 2. Kliknij "Run anyway"
@@ -429,49 +340,24 @@ myllm-chat/
 1. Dodaj folder aplikacji do exclusions
 2. Pobierz ponownie z GitHub Releases
 
-#### macOS
-**"Application can't be opened" (Gatekeeper)**
-1. Kliknij prawym na aplikację → "Open"
-2. Lub w System Preferences → Security → "Open Anyway"
-3. Lub wyłącz Gatekeeper: `sudo spctl --master-disable`
-
-**Aplikacja crashuje przy starcie**
-1. Sprawdź czy masz macOS 10.15+
-2. Sprawdź Console.app dla błędów
-3. Spróbuj wersji x64 vs arm64
-
-#### Linux
-**AppImage nie uruchamia się**
-```bash
-chmod +x MyLLM-Chat-*.AppImage
-./MyLLM-Chat-*.AppImage
-```
-
-**Brakuje bibliotek (Ubuntu/Debian)**
-```bash
-sudo apt-get install libgtk-3-0 libxss1 libnss3 libgconf-2-4
-```
-
-**Problem z permissions**
-```bash
-sudo chmod +x MyLLM-Chat-*.AppImage
-sudo chown $USER:$USER MyLLM-Chat-*.AppImage
-```
+**DevTools otwierają się automatycznie**
+1. To oznacza że używasz wersji development
+2. Pobierz najnowszą wersję z GitHub Releases
+3. Upewnij się że pobierasz `MyLLM Chat.exe` z folderu releases
 
 ### Problemy z developmentem 💻
 
 #### Problem z bazą danych
 ```bash
 cd server
-npx prisma db push
 npx prisma generate
+# SQLite database is created automatically
 ```
 
 #### Problem z pamięcią wektorową
 ```bash
-# Jeśli pamięć wektorowa nie działa, sprawdź inicjalizację
-# Model embeddings pobiera się przy pierwszym uruchomieniu (~50MB)
-# Sprawdź logi serwera w poszukiwaniu błędów inicjalizacji
+# Pamięć używa teraz systemu słów kluczowych - jest szybsza i bardziej niezawodna
+# Sprawdź logi serwera w poszukiwaniu błędów inicjalizacji KeywordMemoryService
 
 # Weryfikacja spójności pamięci
 curl -X POST http://localhost:3001/api/memory/validate/USER_ID
@@ -497,16 +383,14 @@ npm run build
 
 #### Build aplikacji desktop nie działa
 ```bash
-# Wyczyść wszystko
-npm run release:clean
-rm -rf node_modules */node_modules
+# Wyczyść cache electron-builder
+rm -rf electron/release
+rm -rf electron/dist
 
-# Reinstall
-npm install
-
-# Test build
-npm run release:test
-npm run release:build:win
+# Przebuduj
+cd electron
+npm run build
+npx electron-builder --win --x64 --publish=never
 ```
 
 ### FAQ 🙋‍♂️
@@ -515,7 +399,7 @@ npm run release:build:win
 A: Tak, do komunikacji z API dostawców AI (OpenAI, Google, Anthropic).
 
 **Q: Gdzie są przechowywane dane?**
-A: Lokalnie w SQLite database w folderze aplikacji.
+A: Lokalnie w SQLite database w folderze użytkownika (AppData\Roaming\myllm-chat-desktop\).
 
 **Q: Czy mogę używać bez kluczy API?**
 A: Nie, aplikacja wymaga własnych kluczy API do działania.
